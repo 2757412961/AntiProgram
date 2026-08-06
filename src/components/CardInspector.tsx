@@ -1,22 +1,23 @@
-// src/components/CardInspector.tsx
 import React, { useState, useEffect } from 'react';
 import { YgoCard } from '../types/ygo';
 import { Copy, Check, FileCode, ShieldAlert } from 'lucide-react';
 import { fetchCardDetailFromYgocdb } from '../services/cardDetailService';
+import { useCardSearch } from '../context/CardSearchContext';
 
 interface CardInspectorProps {
-  card: YgoCard | null;
+  card?: YgoCard | null;
 }
 
-export const CardInspector: React.FC<CardInspectorProps> = ({ card }) => {
+export const CardInspector: React.FC<CardInspectorProps> = (props) => {
+  const context = useCardSearch();
+  const card = props.card !== undefined ? props.card : context.selectedCard;
+
   const [copiedId, setCopiedId] = useState(false);
   const [copiedDesc, setCopiedDesc] = useState(false);
   const [detail, setDetail] = useState<YgoCard | null>(null);
 
-  // Fetch detailed card info from YGOCDB when a card is selected
   useEffect(() => {
     if (card) {
-      // Use existing card as fallback in case API fails
       fetchCardDetailFromYgocdb(card.id, card).then(setDetail).catch(err => {
         console.warn('Failed to fetch detailed info', err);
         setDetail(card);
@@ -44,8 +45,8 @@ export const CardInspector: React.FC<CardInspectorProps> = ({ card }) => {
 
   const getBanColor = (status?: string) => {
     if (status === 'Forbidden') return '#ef4444';
-    if (status === 'Limited') return '#f97316'; // 限制卡：橙色
-    if (status === 'Semi-Limited') return '#f59e0b'; // 准限制卡：黄色
+    if (status === 'Limited') return '#f97316';
+    if (status === 'Semi-Limited') return '#f59e0b';
     return '#10b981';
   };
 

@@ -2,17 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { YgoCard } from '../types/ygo';
 import { CardItem } from './CardItem';
 import { AlertCircle, ChevronDown } from 'lucide-react';
+import { useCardSearch } from '../context/CardSearchContext';
 
 interface CardGridProps {
-  cards: YgoCard[];
-  loading: boolean;
-  selectedCard: YgoCard | null;
-  onSelectCard: (card: YgoCard) => void;
+  cards?: YgoCard[];
+  loading?: boolean;
+  selectedCard?: YgoCard | null;
+  onSelectCard?: (card: YgoCard) => void;
 }
 
 const PAGE_SIZE = 60; // 每次增量渲染 60 张
 
-export const CardGrid: React.FC<CardGridProps> = ({ cards, loading, selectedCard, onSelectCard }) => {
+export const CardGrid: React.FC<CardGridProps> = (props) => {
+  const context = useCardSearch();
+
+  const cards = props.cards ?? context.cards;
+  const loading = props.loading ?? context.loading;
+  const selectedCard = props.selectedCard !== undefined ? props.selectedCard : context.selectedCard;
+  const onSelectCard = props.onSelectCard ?? context.setSelectedCard;
+
   const [displayCount, setDisplayCount] = useState<number>(PAGE_SIZE);
 
   // 当搜索结果发生变化时重置显示数量

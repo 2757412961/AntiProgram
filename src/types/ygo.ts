@@ -86,3 +86,59 @@ export interface CacheState {
   totalCount: number;
   loadedCount: number;
 }
+
+export interface BanOverrideRule {
+  ids: number[];
+  names?: string[];
+  status: {
+    masterDuel: string;
+    ocg: string;
+    tcg: string;
+  };
+}
+
+export interface YgocdbApiItem {
+  id: number;
+  name?: string;
+  cn_name?: string;
+  sc_name?: string;
+  jp_name?: string;
+  en_name?: string;
+  text?: {
+    types?: string;
+    desc?: string;
+  };
+  data?: {
+    attribute?: number;
+    level?: number;
+    atk?: number;
+    def?: number;
+  };
+  ban_md?: string;
+  ban_ocg?: string;
+  ban_tcg?: string;
+}
+
+export interface YgoProDeckApiItem {
+  id: number;
+  name: string;
+  type?: string;
+  attribute?: string;
+  race?: string;
+  level?: number;
+  rank?: number;
+  linkval?: number;
+  atk?: number;
+  def?: number;
+  desc?: string;
+  archetype?: string;
+  card_images?: Array<{
+    image_url: string;
+    image_url_small?: string;
+  }>;
+  banlist_info?: {
+    ban_tcg?: string;
+    ban_ocg?: string;
+  };
+}
+

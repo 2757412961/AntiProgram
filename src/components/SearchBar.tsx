@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { SearchFilters, CardMainType, GameFormat, BanStatusFilter, CacheState } from '../types/ygo';
+import { useCardSearch } from '../context/CardSearchContext';
 import {
   Search, X, Filter, RotateCcw, ShieldAlert, Award, Database,
   ChevronDown, ChevronUp, Sparkles, Swords, Layers
 } from 'lucide-react';
 
 interface SearchBarProps {
-  filters: SearchFilters;
-  onFilterChange: (newFilters: SearchFilters) => void;
-  cacheState: CacheState;
-  dataSource: string; // 用于稀有度筛选灰显判断
+  filters?: SearchFilters;
+  onFilterChange?: (newFilters: SearchFilters) => void;
+  cacheState?: CacheState;
+  dataSource?: string; // 用于稀有度筛选灰显判断
 }
 
 // ── 种族列表 ─────────────────────────────────────────────
@@ -148,7 +149,13 @@ const RangeInput: React.FC<{
   </div>
 );
 
-export const SearchBar: React.FC<SearchBarProps> = ({ filters, onFilterChange, cacheState, dataSource }) => {
+export const SearchBar: React.FC<SearchBarProps> = (props) => {
+  const context = useCardSearch();
+  const filters = props.filters ?? context.filters;
+  const onFilterChange = props.onFilterChange ?? context.setFilters;
+  const cacheState = props.cacheState ?? context.cacheState;
+  const dataSource = props.dataSource ?? context.dataSource;
+
   const [searchTerm, setSearchTerm] = useState(filters.keyword);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 

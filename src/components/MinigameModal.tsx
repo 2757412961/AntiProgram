@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { X, Gamepad2, ExternalLink, Sparkles, Trophy, Play, Zap } from 'lucide-react';
+import { X, Gamepad2, ExternalLink, Sparkles, Trophy, Play, Zap, Flame } from 'lucide-react';
 
 interface MinigameModalProps {
   isOpen: boolean;
   onClose: () => void;
   onStartMastermind: () => void;
+  onStartTank: () => void;
 }
 
-export const MinigameModal: React.FC<MinigameModalProps> = ({ isOpen, onClose, onStartMastermind }) => {
+export const MinigameModal: React.FC<MinigameModalProps> = ({ isOpen, onClose, onStartMastermind, onStartTank }) => {
   const [customGameUrl, setCustomGameUrl] = useState('');
 
   if (!isOpen) return null;
@@ -20,10 +21,22 @@ export const MinigameModal: React.FC<MinigameModalProps> = ({ isOpen, onClose, o
 
   const quickGameLinks = [
     {
+      id: 'tank-battle',
+      title: '坦克大战 (Battle City Arcade)',
+      subtitle: '经典街机复刻！操控坦克掩护老鹰基地，痛击敌方守卫！',
+      badge: '经典热血',
+      badgeColor: '#f59e0b',
+      icon: Flame,
+      action: () => {
+        onClose();
+        onStartTank();
+      },
+    },
+    {
       id: 'mastermind',
       title: '珠玑妙算 (Mastermind / Bulls & Cows)',
       subtitle: '经典双人/人机密码破译桌面游戏（含 6 色与 YGO 6 属性模式）',
-      badge: '热门新游',
+      badge: '热门智力',
       badgeColor: '#ec4899',
       icon: Trophy,
       action: () => {

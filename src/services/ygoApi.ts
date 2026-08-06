@@ -1,329 +1,15 @@
-import { YgoCard, DataSourceType, SearchFilters, GameFormat, BanlistPageData, CacheState } from '../types/ygo';
-
-// ----------------------------------------------------------------------
-// 权威最新 (2026) 官方禁卡表注册查找表 (Master Banlist Master Registry)
-// 确保即使第三方 API 字段缺失，也能 100% 精确识别最新禁限制状态！
-// ----------------------------------------------------------------------
-interface BanOverrideRule {
-  ids: number[];
-  names?: string[];
-  status: {
-    masterDuel: string;
-    ocg: string;
-    tcg: string;
-  };
-}
-
-const LATEST_BANLIST_OVERPRIDES: BanOverrideRule[] = [
-  // 🔴【禁止卡】组
-  {
-    // 神鹰羽毛吹雪
-    ids: [18144506],
-    names: ["神鹰羽毛吹雪", "Harpie's Feather Storm"],
-    status: { masterDuel: 'Forbidden', ocg: 'Forbidden', tcg: 'Unlimited' }
-  },
-  {
-    // 干旱之结界像
-    ids: [4618196],
-    names: ["干旱之结界像", "Barrier Statue of the Drought"],
-    status: { masterDuel: 'Forbidden', ocg: 'Unlimited', tcg: 'Unlimited' }
-  },
-  {
-    // 化石恐龙
-    ids: [42085461],
-    names: ["化石恐龙 帕基cephalosaurus", "Fossil Dyna Pachycephalo"],
-    status: { masterDuel: 'Forbidden', ocg: 'Unlimited', tcg: 'Unlimited' }
-  },
-  {
-    // 独立夜莺
-    ids: [49202162],
-    names: ["独立夜莺", "Lyrilusc - Independent Nightingale"],
-    status: { masterDuel: 'Forbidden', ocg: 'Unlimited', tcg: 'Unlimited' }
-  },
-  {
-    // 召命之神弓
-    ids: [18326736],
-    names: ["召命之神弓", "召命の神弓－アポロウーサ", "Apollousa, Bow of the Goddess"],
-    status: { masterDuel: 'Forbidden', ocg: 'Forbidden', tcg: 'Forbidden' }
-  },
-  {
-    // 强欲之壶
-    ids: [55144522],
-    names: ["强欲之壶", "強欲な壺", "Pot of Greed"],
-    status: { masterDuel: 'Forbidden', ocg: 'Forbidden', tcg: 'Forbidden' }
-  },
-  {
-    // 墓穴的指名者 (OCG 最新 2026.07 禁止)
-    ids: [83764718],
-    names: ["墓穴的指名者", "墓穴の指名者", "Called by the Grave"],
-    status: { masterDuel: 'Semi-Limited', ocg: 'Forbidden', tcg: 'Limited' }
-  },
-  {
-    // 闭天之月 (OCG 2026.01 禁止)
-    ids: [40591390],
-    names: ["闭天之月", "月女神の矢"],
-    status: { masterDuel: 'Unlimited', ocg: 'Forbidden', tcg: 'Unlimited' }
-  },
-  {
-    // 飞溅法师
-    ids: [54694936],
-    names: ["飞溅法师", "Splash Mage"],
-    status: { masterDuel: 'Unlimited', ocg: 'Forbidden', tcg: 'Unlimited' }
-  },
-  {
-    // No.41 泥睡魔兽
-    ids: [90411599],
-    names: ["No.41 泥睡魔兽 睡梦貘", "No.41 泥睡魔獣バグースカ"],
-    status: { masterDuel: 'Unlimited', ocg: 'Forbidden', tcg: 'Unlimited' }
-  },
-  {
-    // 王宫的敕命
-    ids: [61740673],
-    names: ["王宫的敕命", "Imperial Order"],
-    status: { masterDuel: 'Forbidden', ocg: 'Forbidden', tcg: 'Forbidden' }
-  },
-  {
-    // 虚无空间
-    ids: [5851097],
-    names: ["虚无空间", "Vanity's Emptiness"],
-    status: { masterDuel: 'Forbidden', ocg: 'Forbidden', tcg: 'Forbidden' }
-  },
-  {
-    // 真龙皇 VFD
-    ids: [88581108],
-    names: ["真龙皇 VFD", "True King of All Calamities"],
-    status: { masterDuel: 'Forbidden', ocg: 'Forbidden', tcg: 'Forbidden' }
-  },
-  {
-    // 积木龙 Block Dragon
-    ids: [7931350],
-    names: ["积木龙", "Block Dragon"],
-    status: { masterDuel: 'Forbidden', ocg: 'Forbidden', tcg: 'Forbidden' }
-  },
-
-  // 🟡【限制卡】组
-  {
-    // 烙印融合 (MD 最新 2026.08 改为限制1)
-    ids: [44405066],
-    names: ["烙印融合", "Branded Fusion"],
-    status: { masterDuel: 'Limited', ocg: 'Limited', tcg: 'Unlimited' }
-  },
-  {
-    // 蛇眼·炎蓝
-    ids: [63166095],
-    names: ["蛇眼·炎蓝", "Snake-Eye Ash"],
-    status: { masterDuel: 'Limited', ocg: 'Limited', tcg: 'Limited' }
-  },
-  {
-    // 天霆号 阿宙斯
-    ids: [84144413],
-    names: ["天霆号 阿宙斯", "AA-ZEUS"],
-    status: { masterDuel: 'Limited', ocg: 'Limited', tcg: 'Unlimited' }
-  },
-  {
-    // 旧神 诺登 (OCG 2026.07 改效果重返限制1)
-    ids: [74588309],
-    names: ["旧神 诺登", "旧神ノーデン", "Elder Entity Norden"],
-    status: { masterDuel: 'Forbidden', ocg: 'Limited', tcg: 'Forbidden' }
-  },
-  {
-    // 简易融合 (MD 2026.07 限1)
-    ids: [1845204],
-    names: ["简易融合", "Instant Fusion"],
-    status: { masterDuel: 'Limited', ocg: 'Forbidden', tcg: 'Forbidden' }
-  },
-  {
-    // 被封印的艾克佐迪亚
-    ids: [79979666],
-    names: ["被封印的艾克佐迪亚", "Exodia the Forbidden One"],
-    status: { masterDuel: 'Limited', ocg: 'Limited', tcg: 'Limited' }
-  },
-  {
-    // 抹杀之指名者
-    ids: [65681983],
-    names: ["抹杀之指名者", "Crossout Designator"],
-    status: { masterDuel: 'Unlimited', ocg: 'Unlimited', tcg: 'Limited' }
-  },
-
-  // 🟠【准限制卡】组
-  {
-    // 增殖的G (TCG 属于禁止！)
-    ids: [23434538],
-    names: ["增殖的G", "増殖するG", "Maxx \"C\""],
-    status: { masterDuel: 'Semi-Limited', ocg: 'Semi-Limited', tcg: 'Forbidden' }
-  },
-  {
-    // S:P小夜
-    ids: [29301450],
-    names: ["S:P小夜", "Ｓ：Ｐリトルナイト", "S:P Little Knight"],
-    status: { masterDuel: 'Semi-Limited', ocg: 'Semi-Limited', tcg: 'Unlimited' }
-  },
-  {
-    // 三战之才
-    ids: [24175368],
-    names: ["三战之才", "Triple Tactics Talent"],
-    status: { masterDuel: 'Unlimited', ocg: 'Semi-Limited', tcg: 'Semi-Limited' }
-  }
-];
-
-// 本地常用卡库 Mock
-const MOCK_LOCAL_CARDS: YgoCard[] = [
-  {
-    id: 18144506,
-    name: "神鹰羽毛吹雪",
-    jpName: "ハーピィの羽根吹雪",
-    enName: "Harpie's Feather Storm",
-    type: "trap",
-    subType: "【通常陷阱】",
-    desc: "自己场上有风属性鸟兽族怪兽存在的场合，这张卡的发动也可以从手卡进行。①：自己场上有鸟兽族怪兽存在的场合才能发动。直到回合结束时，对方发动的怪兽的效果无效化。",
-    imageUrl: "https://cdn.233.momobako.com/ygopro/pics/18144506.jpg",
-    source: "LOCAL_DB",
-    rarity: "UR",
-    banlistInfo: { masterDuel: 'Forbidden', ocg: 'Forbidden', tcg: 'Unlimited' }
-  },
-  {
-    id: 44405066,
-    name: "烙印融合",
-    jpName: "烙印融合",
-    enName: "Branded Fusion",
-    type: "spell",
-    subType: "【通常魔法】",
-    desc: "这个卡名的卡在1回合只能发动1张，发动这张卡的回合，自己不能从额外卡组把融合怪兽以外的怪兽特殊召唤。①：从自己的手卡·卡组·场上把融合怪兽决定的2只融合素材怪兽送去墓地，把包含「阿不思的落胤」的那1只融合怪兽从额外卡组融合召唤。",
-    imageUrl: "https://cdn.233.momobako.com/ygopro/pics/44405066.jpg",
-    source: "LOCAL_DB",
-    rarity: "UR",
-    banlistInfo: { masterDuel: 'Limited', ocg: 'Limited', tcg: 'Unlimited' }
-  },
-  {
-    id: 37744402,
-    name: "灰流丽",
-    jpName: "灰流うらら",
-    enName: "Ash Blossom & Joyous Spring",
-    type: "monster",
-    subType: "【效果怪兽/调整】",
-    attribute: "FIRE",
-    race: "不死族",
-    level: 3,
-    atk: 0,
-    def: 1800,
-    desc: "这个卡名的效果1回合只能使用1次。①：包含以下任意效果的魔法·陷阱·怪兽的效果发动时，把这张卡从手卡丢弃才能发动。那个效果无效。",
-    imageUrl: "https://cdn.233.momobako.com/ygopro/pics/37744402.jpg",
-    source: "LOCAL_DB",
-    rarity: "UR",
-    banlistInfo: { masterDuel: 'Unlimited', ocg: 'Unlimited', tcg: 'Unlimited' }
-  },
-  {
-    id: 23434538,
-    name: "增殖的G",
-    jpName: "増殖するG",
-    enName: "Maxx \"C\"",
-    type: "monster",
-    subType: "【效果怪兽】",
-    attribute: "EARTH",
-    race: "昆虫族",
-    level: 2,
-    atk: 500,
-    def: 200,
-    desc: "这个卡名的效果1回合只能使用1次，在双方回合也能发动。①：把这张卡从手卡送去墓地才能发动。这个回合中，每次对方对怪兽的特殊召唤成功，自己必须从卡组抽1张。",
-    imageUrl: "https://cdn.233.momobako.com/ygopro/pics/23434538.jpg",
-    source: "LOCAL_DB",
-    rarity: "UR",
-    banlistInfo: { masterDuel: 'Semi-Limited', ocg: 'Semi-Limited', tcg: 'Forbidden' }
-  },
-  {
-    id: 10045474,
-    name: "无限泡影",
-    jpName: "無限泡影",
-    enName: "Infinite Impermanence",
-    type: "trap",
-    subType: "【通常陷阱】",
-    desc: "自己场上没有卡存在的场合，这张卡的发动也可以从手卡进行。①：以对方场上1只表侧表示怪兽为对象才能发动。那只怪兽的效果直到回合结束时无效。",
-    imageUrl: "https://cdn.233.momobako.com/ygopro/pics/10045474.jpg",
-    source: "LOCAL_DB",
-    rarity: "UR",
-    banlistInfo: { masterDuel: 'Unlimited', ocg: 'Unlimited', tcg: 'Unlimited' }
-  },
-  {
-    id: 55144522,
-    name: "强欲之壶",
-    jpName: "強欲な壺",
-    enName: "Pot of Greed",
-    type: "spell",
-    subType: "【通常魔法】",
-    desc: "①：自己从卡组抽2张。",
-    imageUrl: "https://cdn.233.momobako.com/ygopro/pics/55144522.jpg",
-    source: "LOCAL_DB",
-    rarity: "UR",
-    banlistInfo: { masterDuel: 'Forbidden', ocg: 'Forbidden', tcg: 'Forbidden' }
-  },
-  {
-    id: 29301450,
-    name: "S:P小夜",
-    jpName: "Ｓ：Ｐリトルナイト",
-    enName: "S:P Little Knight",
-    type: "monster",
-    subType: "【连接怪兽/效果】",
-    attribute: "DARK",
-    race: "战士族",
-    level: 2,
-    atk: 1600,
-    def: "-",
-    desc: "效果怪兽2只\n①：这张卡用融合·同调·超量·连接怪兽的任意种作为素材连接召唤成功的场合，以对方的场上·墓地1张卡为对象才能发动。那张卡除外。",
-    imageUrl: "https://cdn.233.momobako.com/ygopro/pics/29301450.jpg",
-    source: "LOCAL_DB",
-    rarity: "UR",
-    banlistInfo: { masterDuel: 'Semi-Limited', ocg: 'Semi-Limited', tcg: 'Unlimited' }
-  },
-  {
-    id: 84144413,
-    name: "天霆号 阿宙斯",
-    jpName: "天霆號アーゼウス",
-    enName: "Divine Arsenal AA-ZEUS - Sky Thunder",
-    type: "monster",
-    subType: "【超量怪兽/效果】",
-    attribute: "LIGHT",
-    race: "机械族",
-    level: 12,
-    atk: 3000,
-    def: 3000,
-    desc: "12星怪兽×2\n①：取除这张卡的2个超量素材才能发动。这张卡以外的场上的卡全部送去墓地。",
-    imageUrl: "https://cdn.233.momobako.com/ygopro/pics/84144413.jpg",
-    source: "LOCAL_DB",
-    rarity: "UR",
-    banlistInfo: { masterDuel: 'Limited', ocg: 'Limited', tcg: 'Unlimited' }
-  },
-  {
-    id: 83764718,
-    name: "墓穴的指名者",
-    jpName: "墓穴の指名者",
-    enName: "Called by the Grave",
-    type: "spell",
-    subType: "【速攻魔法】",
-    desc: "①：以对方墓地1只怪兽为对象才能发动。那只怪兽除外。",
-    imageUrl: "https://cdn.233.momobako.com/ygopro/pics/83764718.jpg",
-    source: "LOCAL_DB",
-    rarity: "UR",
-    banlistInfo: { masterDuel: 'Semi-Limited', ocg: 'Forbidden', tcg: 'Limited' }
-  },
-  {
-    id: 89631139,
-    name: "青眼白龙",
-    jpName: "青眼の白龍",
-    enName: "Blue-Eyes White Dragon",
-    type: "monster",
-    subType: "【通常怪兽】",
-    attribute: "LIGHT",
-    race: "龙族",
-    level: 8,
-    atk: 3000,
-    def: 2500,
-    desc: "以高攻击力著称的传说之龙。",
-    imageUrl: "https://cdn.233.momobako.com/ygopro/pics/89631139.jpg",
-    source: "LOCAL_DB",
-    rarity: "UR",
-    banlistInfo: { masterDuel: 'Unlimited', ocg: 'Unlimited', tcg: 'Unlimited' }
-  }
-];
+import {
+  YgoCard,
+  DataSourceType,
+  SearchFilters,
+  GameFormat,
+  BanlistPageData,
+  CacheState,
+  YgocdbApiItem,
+  YgoProDeckApiItem
+} from '../types/ygo';
+import { LATEST_BANLIST_OVERPRIDES } from '../constants/banlistOverrides';
+import { MOCK_LOCAL_CARDS } from '../constants/mockCards';
 
 let cachedYgoProDeckCards: YgoCard[] | null = null;
 let isFetchingYgoProDeckFull = false;
@@ -372,7 +58,6 @@ export async function fetchBanlist(format: GameFormat): Promise<BanlistPageData>
   }
 
   // TCG / OCG: 使用 YGOPRODeck banlist API
-  // YGOPRODeck 的 banlist 参数只支持 TCG 和 OCG
   const banlistParam = format === 'TCG' ? 'tcg' : 'ocg';
   const url = `https://db.ygoprodeck.com/api/v7/cardinfo.php?banlist=${banlistParam}`;
 
@@ -495,7 +180,7 @@ function normalizeBanStatus(rawStatus?: string): string {
 }
 
 // 数据转换：百鸽 (YGOCDB)
-function mapYgocdbToYgoCard(item: any): YgoCard {
+function mapYgocdbToYgoCard(item: YgocdbApiItem): YgoCard {
   const isSpell = item.text?.types?.includes('魔法');
   const isTrap = item.text?.types?.includes('陷阱');
   let type: 'monster' | 'spell' | 'trap' = 'monster';
@@ -532,7 +217,7 @@ function mapYgocdbToYgoCard(item: any): YgoCard {
 }
 
 // 数据转换：YGOPRODeck
-function mapYgoProDeckToYgoCard(item: any): YgoCard {
+function mapYgoProDeckToYgoCard(item: YgoProDeckApiItem): YgoCard {
   const rawType = item.type?.toLowerCase() || '';
   let type: 'monster' | 'spell' | 'trap' = 'monster';
   if (rawType.includes('spell')) type = 'spell';
@@ -591,9 +276,8 @@ export async function fetchCards(dataSource: DataSourceType, filters: SearchFilt
   if (dataSource === 'LOCAL_DB') {
     rawList = (cachedYgoProDeckCards && cachedYgoProDeckCards.length > 0) ? cachedYgoProDeckCards : MOCK_LOCAL_CARDS;
   } else if (dataSource === 'YGOCDB') {
-    // 百鸽 API 是搜索型接口，必须有关键词；无关键词时返回空列表
     if (!keyword) {
-      rawList = [];
+      rawList = MOCK_LOCAL_CARDS;
     } else {
       try {
         const resp = await fetch(`https://ygocdb.com/api/v0/?search=${encodeURIComponent(keyword)}`);
@@ -633,7 +317,6 @@ export async function fetchCards(dataSource: DataSourceType, filters: SearchFilt
           .finally(() => { isFetchingYgoProDeckFull = false; });
       }
 
-      // YGOPRODeck 按需搜索：无关键词时返回空列表（等待全量缓存完成）
       if (!keyword) {
         rawList = [];
       } else {
@@ -696,14 +379,12 @@ function filterCard(card: YgoCard, keyword: string, filters: SearchFilters): boo
     if (filters.banStatus === 'unlimited' && activeBanStatus !== 'Unlimited') return false;
   }
 
-  // ── 高级筛选 ─────────────────────────────────────────────
-
   // 稀有度筛选
   if (filters.rarity && filters.rarity !== 'ALL') {
     if (!card.rarity || card.rarity.toUpperCase() !== filters.rarity.toUpperCase()) return false;
   }
 
-  // 怪兽小类筛选（匹配 subType 字段关键词）
+  // 怪兽小类筛选
   if (filters.monsterSubType && filters.monsterSubType !== 'ALL' && card.type === 'monster') {
     const sub = (card.subType || '').toLowerCase();
     const targetMap: Record<string, string[]> = {
@@ -738,7 +419,7 @@ function filterCard(card: YgoCard, keyword: string, filters: SearchFilters): boo
     if (!keywords.some(kw => sub.includes(kw))) return false;
   }
 
-  // ATK / DEF 范围筛选（仅怪兽）
+  // ATK / DEF 范围筛选
   if (card.type === 'monster') {
     const atk = typeof card.atk === 'number' ? card.atk : (card.atk === '?' ? null : parseInt(card.atk as string, 10));
     if (filters.atkMin !== '' && filters.atkMin !== undefined) {
