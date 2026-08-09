@@ -78,6 +78,11 @@ export interface BanlistPageData {
   limited: YgoCard[];
   semiLimited: YgoCard[];
   fetchedAt?: number; // 拉取时间戳 (ms)
+  source: 'remote' | 'local-fallback' | 'local-master-duel';
+  sourceLabel: string;
+  fromCache?: boolean;
+  warning?: string;
+  effectiveDate?: string;
 }
 
 /** 全量卡库缓存状态 */

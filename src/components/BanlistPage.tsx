@@ -2,9 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { YgoCard, GameFormat, BanlistPageData } from '../types/ygo';
 import { fetchBanlist } from '../services/ygoApi';
 import { CardInspector } from './CardInspector';
+import { BanlistHistoryModal } from './BanlistHistoryModal';
 import {
   X, ShieldAlert, Award, RefreshCw, Search, ChevronDown, ChevronRight,
-  AlertTriangle, Ban, Shield
+  AlertTriangle, Ban, Shield, History
 } from 'lucide-react';
 
 interface BanlistPageProps {
@@ -14,7 +15,7 @@ interface BanlistPageProps {
 const FORMAT_TABS: { key: GameFormat; label: string; color: string; note?: string }[] = [
   { key: 'TCG', label: 'TCG 赛制', color: '#3b82f6', note: '实时 API' },
   { key: 'OCG', label: 'OCG 赛制', color: '#10b981', note: '实时 API' },
-  { key: 'MasterDuel', label: 'Master Duel', color: '#f59e0b', note: '本地规则' },
+  { key: 'MasterDuel', label: 'Master Duel', color: '#f59e0b', note: '自动更新' },
 ];
 
 type SectionKey = 'forbidden' | 'limited' | 'semiLimited';
@@ -39,7 +40,7 @@ const SECTIONS: SectionConfig[] = [
     bg: 'rgba(239,68,68,0.08)',
     border: 'rgba(239,68,68,0.3)',
     glow: 'rgba(239,68,68,0.35)',
-    countLabel: '🔴 禁止 (0张)',
+    countLabel: '禁止卡',
   },
   {
     key: 'limited',
@@ -49,7 +50,7 @@ const SECTIONS: SectionConfig[] = [
     bg: 'rgba(249,115,22,0.08)',
     border: 'rgba(249,115,22,0.3)',
     glow: 'rgba(249,115,22,0.3)',
-    countLabel: '🟠 限制 (1张)',
+    countLabel: '限制卡',
   },
   {
     key: 'semiLimited',
@@ -59,7 +60,7 @@ const SECTIONS: SectionConfig[] = [
     bg: 'rgba(245,158,11,0.08)',
     border: 'rgba(245,158,11,0.3)',
     glow: 'rgba(245,158,11,0.25)',
-    countLabel: '🟡 准限制 (2张)',
+    countLabel: '准限制卡',
   },
 ];
 
@@ -228,14 +229,15 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
   const [selectedCard, setSelectedCard] = useState<YgoCard | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [lastFetch, setLastFetch] = useState<number | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
-  const loadBanlist = useCallback(async (fmt: GameFormat) => {
+  const loadBanlist = useCallback(async (fmt: GameFormat, forceRefresh = false) => {
     setLoading(true);
     setError(null);
     setBanlistData(null);
     setSelectedCard(null);
     try {
-      const data = await fetchBanlist(fmt);
+      const data = await fetchBanlist(fmt, { forceRefresh });
       setBanlistData(data);
       setLastFetch(data.fetchedAt || Date.now());
     } catch {
@@ -284,7 +286,7 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
           </span>
           {lastFetch && (
             <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-              更新于 {new Date(lastFetch).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+              {banlistData?.fromCache ? '缓存于' : '请求于'} {new Date(lastFetch).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
         </div>
@@ -387,11 +389,31 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
           </div>
         )}
 
+        <button
+          onClick={() => setHistoryOpen(true)}
+          title="按年份和月份查看各赛制的历史改订"
+          style={{
+            background: 'rgba(245,158,11,0.1)',
+            border: '1px solid rgba(245,158,11,0.35)',
+            color: '#fbbf24',
+            padding: '0.4rem 0.75rem',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            fontSize: '0.8rem',
+          }}
+        >
+          <History size={14} />
+          <span>历史月表</span>
+        </button>
+
         {/* Refresh */}
         <button
-          onClick={() => loadBanlist(format)}
+          onClick={() => loadBanlist(format, true)}
           disabled={loading}
-          title="刷新禁卡表数据"
+          title="绕过缓存并请求最新禁卡表"
           style={{
             background: 'rgba(255,255,255,0.06)',
             border: '1px solid var(--border-color)',
@@ -446,6 +468,29 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
           overflowY: 'auto',
           padding: '1.25rem 1.5rem',
         }}>
+          {banlistData && !loading && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.65rem',
+              marginBottom: '1rem',
+              padding: '0.75rem 1rem',
+              borderRadius: '10px',
+              background: banlistData.warning ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.08)',
+              border: `1px solid ${banlistData.warning ? 'rgba(245,158,11,0.35)' : 'rgba(16,185,129,0.25)'}`,
+              color: banlistData.warning ? '#fcd34d' : '#6ee7b7',
+              fontSize: '0.8rem',
+              lineHeight: 1.5,
+            }}>
+              {banlistData.warning ? <AlertTriangle size={17} /> : <Shield size={17} />}
+              <div>
+                <strong>数据来源：{banlistData.sourceLabel}</strong>
+                {banlistData.effectiveDate && <span> · 规则生效日：{banlistData.effectiveDate}</span>}
+                {banlistData.warning && <div>{banlistData.warning}</div>}
+              </div>
+            </div>
+          )}
+
           {/* Loading state */}
           {loading && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -494,7 +539,7 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
               <AlertTriangle size={48} />
               <p style={{ fontSize: '1rem' }}>{error}</p>
               <button
-                onClick={() => loadBanlist(format)}
+                onClick={() => loadBanlist(format, true)}
                 style={{
                   background: 'rgba(239,68,68,0.15)',
                   border: '1px solid rgba(239,68,68,0.4)',
@@ -533,6 +578,16 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
           <CardInspector card={selectedCard} />
         </div>
       </div>
+
+      <BanlistHistoryModal
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        currentFormat={format}
+        onSelectCardKeyword={(keyword) => {
+          setSearchTerm(keyword);
+          setSelectedCard(null);
+        }}
+      />
 
       <style>{`
         @keyframes pulse {

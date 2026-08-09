@@ -41,16 +41,26 @@ export function getCacheState(): CacheState {
 // 禁卡表缓存，按赛制分开缓存 (5 分钟 TTL)
 const banlistCache: Partial<Record<GameFormat, { data: BanlistPageData; ts: number }>> = {};
 const BANLIST_TTL_MS = 5 * 60 * 1000;
+const MASTER_DUEL_BANLIST_BASE_URL =
+  'https://dawnbrandbots.github.io/yaml-yugi-limit-regulation/master-duel';
+
+export interface FetchBanlistOptions {
+  /** 用户主动刷新时绕过 5 分钟内存缓存。 */
+  forceRefresh?: boolean;
+}
 
 /**
  * 拉取实时禁卡表数据。
  * - TCG/OCG: 调用 YGOPRODeck `?banlist=1` API 实时获取
  * - MasterDuel: 使用本地 override 规则表（无公开 API）
  */
-export async function fetchBanlist(format: GameFormat): Promise<BanlistPageData> {
+export async function fetchBanlist(
+  format: GameFormat,
+  options: FetchBanlistOptions = {}
+): Promise<BanlistPageData> {
   const cached = banlistCache[format];
-  if (cached && Date.now() - cached.ts < BANLIST_TTL_MS) {
-    return cached.data;
+  if (!options.forceRefresh && cached && Date.now() - cached.ts < BANLIST_TTL_MS) {
+    return { ...cached.data, fromCache: true };
   }
 
   if (format === 'MasterDuel') {
@@ -83,17 +93,140 @@ export async function fetchBanlist(format: GameFormat): Promise<BanlistPageData>
       else if (status === 'Semi-Limited') semiLimited.push({ ...card, banlistStatus: status });
     }
 
-    const data: BanlistPageData = { forbidden, limited, semiLimited, fetchedAt: Date.now() };
+    const data: BanlistPageData = {
+      forbidden,
+      limited,
+      semiLimited,
+      fetchedAt: Date.now(),
+      source: 'remote',
+      sourceLabel: `YGOPRODeck ${format} API`,
+      fromCache: false,
+    };
     banlistCache[format] = { data, ts: Date.now() };
     return data;
-  } catch {
-    // 回退到本地 override 数据
-    return buildBanlistFromOverrides(format);
+  } catch (error) {
+    // 保留可用的本地数据，同时让界面明确知道实时请求失败。
+    const message = error instanceof Error ? error.message : '未知网络错误';
+    return buildBanlistFromOverrides(
+      format,
+      `实时接口请求失败（${message}），当前展示本地备用规则，可能不是最新数据。`
+    );
   }
 }
 
-/** 从本地 override 规则构建 MasterDuel 禁卡表 */
-function fetchMasterDuelBanlist(): BanlistPageData {
+/** 从每日更新的社区 JSON 拉取当前 Master Duel 卡表，并通过 YGOPRODeck 补齐卡图与密码。 */
+async function fetchMasterDuelBanlist(): Promise<BanlistPageData> {
+  try {
+    const versionResp = await fetch(`${MASTER_DUEL_BANLIST_BASE_URL}/current.vector.json`);
+    if (!versionResp.ok) throw new Error(`版本接口 HTTP ${versionResp.status}`);
+    const versionData = await versionResp.json() as { date?: string };
+    if (!versionData.date || !/^\d{4}-\d{2}-\d{2}$/.test(versionData.date)) {
+      throw new Error('版本接口缺少有效生效日期');
+    }
+
+    const regulationResp = await fetch(
+      `${MASTER_DUEL_BANLIST_BASE_URL}/${versionData.date}.name.json`
+    );
+    if (!regulationResp.ok) throw new Error(`卡表接口 HTTP ${regulationResp.status}`);
+    const regulation = await regulationResp.json() as Record<string, number>;
+    const entries = Object.entries(regulation).filter((entry): entry is [string, number] =>
+      typeof entry[0] === 'string' && [0, 1, 2].includes(entry[1])
+    );
+    if (entries.length === 0) throw new Error('卡表接口返回空数据');
+
+    const details = await fetchYgoProDeckCardsByNames(entries.map(([name]) => name));
+    const detailByName = new Map(details.map(card => [card.name.toLowerCase(), card]));
+    const forbidden: YgoCard[] = [];
+    const limited: YgoCard[] = [];
+    const semiLimited: YgoCard[] = [];
+
+    for (const [name, limit] of entries) {
+      const status = limit === 0 ? 'Forbidden' : limit === 1 ? 'Limited' : 'Semi-Limited';
+      const detail = detailByName.get(name.toLowerCase()) || createMinimalRemoteCard(name);
+      const card: YgoCard = {
+        ...detail,
+        banlistStatus: status,
+        banlistInfo: {
+          ...detail.banlistInfo,
+          masterDuel: status,
+        },
+      };
+      if (limit === 0) forbidden.push(card);
+      else if (limit === 1) limited.push(card);
+      else semiLimited.push(card);
+    }
+
+    const data: BanlistPageData = {
+      forbidden,
+      limited,
+      semiLimited,
+      fetchedAt: Date.now(),
+      source: 'remote',
+      sourceLabel: 'YAML Yugi Master Duel 自动更新数据',
+      fromCache: false,
+      effectiveDate: versionData.date,
+    };
+    banlistCache.MasterDuel = { data, ts: Date.now() };
+    return data;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '未知网络错误';
+    return buildLocalMasterDuelBanlist(
+      `Master Duel 在线卡表请求失败（${message}），当前展示项目内置备用规则。`
+    );
+  }
+}
+
+async function fetchYgoProDeckCardsByNames(names: string[]): Promise<YgoCard[]> {
+  const batches: string[][] = [];
+  for (let index = 0; index < names.length; index += 20) {
+    batches.push(names.slice(index, index + 20));
+  }
+
+  const fetchBatch = async (batch: string[]): Promise<YgoCard[]> => {
+    const url = `https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(batch.join('|'))}`;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        if (batch.length === 1) return [];
+        const midpoint = Math.ceil(batch.length / 2);
+        const splitResults = await Promise.all([
+          fetchBatch(batch.slice(0, midpoint)),
+          fetchBatch(batch.slice(midpoint)),
+        ]);
+        return splitResults.flat();
+      }
+      const payload = await response.json();
+      return Array.isArray(payload.data)
+        ? (payload.data as YgoProDeckApiItem[]).map(mapYgoProDeckToYgoCard)
+        : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const results = await Promise.all(batches.map(fetchBatch));
+
+  return results.flat();
+}
+
+function createMinimalRemoteCard(name: string): YgoCard {
+  let hash = 0;
+  for (let index = 0; index < name.length; index++) {
+    hash = ((hash << 5) - hash + name.charCodeAt(index)) | 0;
+  }
+  return {
+    id: -Math.max(1, Math.abs(hash)),
+    name,
+    enName: name,
+    type: 'monster',
+    desc: '卡牌详情暂时无法从 YGOPRODeck 获取。',
+    imageUrl: 'https://images.ygoprodeck.com/images/cards/back_high.jpg',
+    source: 'YGOPRODeck',
+  };
+}
+
+/** 在线数据不可用时，从项目内置 override 规则构建 Master Duel 卡表。 */
+function buildLocalMasterDuelBanlist(warning: string): BanlistPageData {
   const forbidden: YgoCard[] = [];
   const limited: YgoCard[] = [];
   const semiLimited: YgoCard[] = [];
@@ -120,13 +253,23 @@ function fetchMasterDuelBanlist(): BanlistPageData {
     else if (status === 'Semi-Limited') semiLimited.push(card);
   }
 
-  const data: BanlistPageData = { forbidden, limited, semiLimited, fetchedAt: Date.now() };
+  const data: BanlistPageData = {
+    forbidden,
+    limited,
+    semiLimited,
+    fetchedAt: Date.now(),
+    source: 'local-master-duel',
+    sourceLabel: '项目内置 Master Duel 规则',
+    fromCache: false,
+    effectiveDate: '2026-08-04',
+    warning,
+  };
   banlistCache['MasterDuel'] = { data, ts: Date.now() };
   return data;
 }
 
 /** 回退：从 override 规则构建任意赛制禁卡表 */
-function buildBanlistFromOverrides(format: GameFormat): BanlistPageData {
+function buildBanlistFromOverrides(format: GameFormat, warning?: string): BanlistPageData {
   const forbidden: YgoCard[] = [];
   const limited: YgoCard[] = [];
   const semiLimited: YgoCard[] = [];
@@ -153,7 +296,16 @@ function buildBanlistFromOverrides(format: GameFormat): BanlistPageData {
     else if (status === 'Semi-Limited') semiLimited.push(card);
   }
 
-  return { forbidden, limited, semiLimited, fetchedAt: Date.now() };
+  return {
+    forbidden,
+    limited,
+    semiLimited,
+    fetchedAt: Date.now(),
+    source: 'local-fallback',
+    sourceLabel: `${format} 本地备用规则`,
+    fromCache: false,
+    warning,
+  };
 }
 
 // 根据卡片 ID 或名称，从全量最新禁限注册表匹配获取状态
