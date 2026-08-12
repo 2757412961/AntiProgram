@@ -4,6 +4,7 @@ import { extname, join, normalize, resolve, sep } from 'node:path';
 import { loadEnvFile } from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { sendJson } from './lib/http.mjs';
+import { proxyUpstream } from './lib/upstreamProxy.mjs';
 
 const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const envPath = join(rootDir, '.env');
@@ -37,6 +38,43 @@ const contentTypes = {
 };
 
 async function apiHandler(request, response, url) {
+  if (url.pathname === '/api/master-duel-banlist') {
+    await proxyUpstream(
+      request,
+      response,
+      'https://dawnbrandbots.github.io/yaml-yugi-limit-regulation/master-duel/current.vector.json',
+    );
+    return true;
+  }
+  if (url.pathname.startsWith('/api/ygoprodeck/')) {
+    const path = url.pathname.slice('/api/ygoprodeck'.length);
+    await proxyUpstream(request, response, `https://db.ygoprodeck.com/api/v7${path}${url.search}`);
+    return true;
+  }
+  if (url.pathname === '/api/ygocdb' || url.pathname.startsWith('/api/ygocdb/')) {
+    const path = url.pathname.slice('/api/ygocdb'.length) || '/';
+    await proxyUpstream(request, response, `https://ygocdb.com/api/v0${path}${url.search}`);
+    return true;
+  }
+  if (url.pathname.startsWith('/api/yaml-yugi-cards/')) {
+    const path = url.pathname.slice('/api/yaml-yugi-cards/'.length);
+    await proxyUpstream(
+      request,
+      response,
+      `https://cdn.jsdelivr.net/gh/DawnbrandBots/yaml-yugi/data/cards/${encodeURIComponent(path)}`,
+    );
+    return true;
+  }
+  if (url.pathname.startsWith('/chinese-card-images/')) {
+    const path = url.pathname.slice('/chinese-card-images'.length);
+    await proxyUpstream(request, response, `https://cdn.233.momobako.com${path}${url.search}`);
+    return true;
+  }
+  if (url.pathname.startsWith('/card-images/')) {
+    const path = url.pathname.slice('/card-images'.length);
+    await proxyUpstream(request, response, `https://images.ygoprodeck.com${path}${url.search}`);
+    return true;
+  }
   if (request.method === 'GET' && url.pathname === '/api/v1/master-duel-banlist-history') {
     const data = await getMasterDuelBanlistHistory({
       force: url.searchParams.get('refresh') === '1',

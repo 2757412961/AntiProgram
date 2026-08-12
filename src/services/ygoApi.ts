@@ -42,19 +42,9 @@ export function getCacheState(): CacheState {
 // 禁卡表缓存，按赛制分开缓存 (5 分钟 TTL)
 const banlistCache: Partial<Record<GameFormat, { data: BanlistPageData; ts: number }>> = {};
 const BANLIST_TTL_MS = 5 * 60 * 1000;
-const MASTER_DUEL_BANLIST_BASE_URL =
-  'https://dawnbrandbots.github.io/yaml-yugi-limit-regulation/master-duel';
-const YGOPRODECK_ALL_CARDS_WITH_MISC_URL =
-  'https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes';
-const MASTER_DUEL_VECTOR_URL = import.meta.env.DEV
-  ? '/api/master-duel-banlist'
-  : `${MASTER_DUEL_BANLIST_BASE_URL}/current.vector.json`;
-const MASTER_DUEL_CARD_METADATA_URL = import.meta.env.DEV
-  ? '/api/ygoprodeck/cardinfo.php?misc=yes'
-  : YGOPRODECK_ALL_CARDS_WITH_MISC_URL;
-const YAML_YUGI_CARD_BASE_URL = import.meta.env.DEV
-  ? '/api/yaml-yugi-cards'
-  : 'https://cdn.jsdelivr.net/gh/DawnbrandBots/yaml-yugi/data/cards';
+const MASTER_DUEL_VECTOR_URL = '/api/master-duel-banlist';
+const MASTER_DUEL_CARD_METADATA_URL = '/api/ygoprodeck/cardinfo.php?misc=yes';
+const YAML_YUGI_CARD_BASE_URL = '/api/yaml-yugi-cards';
 
 interface MasterDuelVectorResponse {
   date: string;
@@ -120,7 +110,7 @@ export async function fetchBanlist(
 
   // TCG / OCG: 使用 YGOPRODeck banlist API
   const banlistParam = format === 'TCG' ? 'tcg' : 'ocg';
-  const url = `https://db.ygoprodeck.com/api/v7/cardinfo.php?banlist=${banlistParam}`;
+  const url = `/api/ygoprodeck/cardinfo.php?banlist=${banlistParam}`;
 
   try {
     const resp = await fetch(url);
@@ -379,7 +369,7 @@ function mapYgocdbToYgoCard(item: YgocdbApiItem): YgoCard {
     atk: item.data?.atk === -1 ? '?' : item.data?.atk,
     def: item.data?.def === -1 ? '?' : item.data?.def,
     desc: item.text?.desc || '无效果文本',
-    imageUrl: `https://cdn.233.momobako.com/ygopro/pics/${item.id}.jpg`,
+    imageUrl: `/chinese-card-images/ygopro/pics/${item.id}.jpg`,
     source: 'YGOCDB',
     banlistInfo: matchedOverride || {
       masterDuel: item.ban_md ? normalizeBanStatus(item.ban_md) : 'Unlimited',
@@ -413,8 +403,8 @@ function mapYgoProDeckToYgoCard(item: YgoProDeckApiItem): YgoCard {
     atk: item.atk,
     def: item.def,
     desc: item.desc || '',
-    imageUrl: item.card_images?.[0]?.image_url || `https://images.ygoprodeck.com/images/cards/${item.id}.jpg`,
-    imageUrlSmall: item.card_images?.[0]?.image_url_small,
+    imageUrl: `/card-images/images/cards/${item.id}.jpg`,
+    imageUrlSmall: `/card-images/images/cards_small/${item.id}.jpg`,
     localizationIds: item.card_images
       ?.map(image => image.id)
       .filter((id): id is number => Number.isInteger(id) && id !== item.id),
@@ -467,7 +457,7 @@ export async function fetchCards(dataSource: DataSourceType, filters: SearchFilt
         : MOCK_LOCAL_CARDS;
     } else {
       try {
-        const resp = await fetch(`https://ygocdb.com/api/v0/?search=${encodeURIComponent(keyword)}`);
+        const resp = await fetch(`/api/ygocdb/?search=${encodeURIComponent(keyword)}`);
         if (resp.ok) {
           const data = await resp.json();
           if (data.result && Array.isArray(data.result)) {
@@ -489,7 +479,7 @@ export async function fetchCards(dataSource: DataSourceType, filters: SearchFilt
         cacheState = { status: 'loading', totalCount: 0, loadedCount: 0 };
         notifyCacheListeners();
 
-        fetch('https://db.ygoprodeck.com/api/v7/cardinfo.php')
+        fetch('/api/ygoprodeck/cardinfo.php')
           .then(res => res.json())
           .then(data => {
             if (data.data && Array.isArray(data.data)) {
@@ -510,7 +500,7 @@ export async function fetchCards(dataSource: DataSourceType, filters: SearchFilt
         rawList = [];
       } else {
         try {
-          const url = `https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=${encodeURIComponent(keyword)}`;
+          const url = `/api/ygoprodeck/cardinfo.php?fname=${encodeURIComponent(keyword)}`;
           const resp = await fetch(url);
           if (resp.ok) {
             const data = await resp.json();

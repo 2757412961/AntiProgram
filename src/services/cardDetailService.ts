@@ -24,10 +24,8 @@ interface YgocdbCardDetail {
   };
 }
 
-const YGOCDB_API_BASE = import.meta.env.DEV ? '/api/ygocdb' : 'https://ygocdb.com/api/v0';
-const CHINESE_IMAGE_BASE = import.meta.env.DEV
-  ? '/chinese-card-images'
-  : 'https://cdn.233.momobako.com';
+const YGOCDB_API_BASE = '/api/ygocdb';
+const CHINESE_IMAGE_BASE = '/chinese-card-images';
 const chineseCardCache = new Map<number, YgocdbCardDetail | null>();
 
 function containsChinese(value?: string): boolean {
@@ -58,9 +56,7 @@ export function getChineseCardImageUrl(
 }
 
 export function getChineseCardBackUrl(): string {
-  return import.meta.env.DEV
-    ? '/card-images/images/cards/back_high.jpg'
-    : 'https://images.ygoprodeck.com/images/cards/back_high.jpg';
+  return '/card-images/images/cards/back_high.jpg';
 }
 
 function applyChineseDetail(card: YgoCard, raw: YgocdbCardDetail): YgoCard {
