@@ -1,15 +1,20 @@
 import React from 'react';
-import { ShieldCheck, ShieldAlert, Gamepad2 } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, Gamepad2, History } from 'lucide-react';
 import { DataSourceSelector } from './DataSourceSelector';
 import { useCardSearch } from '../context/CardSearchContext';
+import type { PrimaryView } from '../App';
 
 interface HeaderProps {
+  activeView: PrimaryView;
   onOpenBanlist: () => void;
+  onOpenBanlistHistory: () => void;
   onOpenMinigame: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
+  activeView,
   onOpenBanlist,
+  onOpenBanlistHistory,
   onOpenMinigame,
 }) => {
   const { dataSource, setDataSource, cards, cacheState } = useCardSearch();
@@ -24,24 +29,15 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* 数据源选择器 (卡片式下拉) */}
-      <DataSourceSelector
-        currentSource={dataSource}
-        onSourceChange={setDataSource}
-        cacheState={cacheState}
-      />
+      {activeView === 'cards' && (
+        <DataSourceSelector
+          currentSource={dataSource}
+          onSourceChange={setDataSource}
+          cacheState={cacheState}
+        />
+      )}
 
       <div className="header-actions">
-        {/* 禁卡表入口按钮 */}
-        <button
-          onClick={onOpenBanlist}
-          className="btn-header-banlist"
-          title="查看当前生效的 TCG / OCG / MasterDuel 实时禁卡表"
-        >
-          <ShieldAlert size={16} color="#f87171" />
-          <span>禁卡表</span>
-        </button>
-
         {/* 小游戏入口按钮 */}
         <button
           onClick={onOpenMinigame}
@@ -51,11 +47,33 @@ export const Header: React.FC<HeaderProps> = ({
           <Gamepad2 size={16} color="#c4b5fd" />
           <span>小游戏</span>
         </button>
+
+        {/* Master Duel 禁卡表变更记录入口 */}
+        <button
+          onClick={onOpenBanlistHistory}
+          className="btn-header-banlist-history"
+          title="按公告年月查看 Master Duel 禁卡表变更记录"
+        >
+          <History size={16} color="#fbbf24" />
+          <span>禁卡表变更记录</span>
+        </button>
+
+        {/* 禁卡表入口按钮 */}
+        <button
+          onClick={onOpenBanlist}
+          className="btn-header-banlist"
+          title="查看当前生效的 TCG / OCG / MasterDuel 实时禁卡表"
+        >
+          <ShieldAlert size={16} color="#f87171" />
+          <span>禁卡表</span>
+        </button>
       </div>
 
-      <div className="logo-area" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+      <div className="header-load-status logo-area" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
         <ShieldCheck size={16} color="var(--accent-cyan)" />
-        <span>当前加载: <strong style={{ color: '#fff' }}>{cards.length}</strong> 张卡片</span>
+        {activeView === 'cards'
+          ? <span>当前加载: <strong style={{ color: '#fff' }}>{cards.length}</strong> 张卡片</span>
+          : <span>多源环境聚合</span>}
       </div>
     </header>
   );

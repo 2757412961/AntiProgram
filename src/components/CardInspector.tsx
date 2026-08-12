@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { YgoCard } from '../types/ygo';
 import { Copy, Check, FileCode, ShieldAlert } from 'lucide-react';
 import { fetchCardDetailFromYgocdb } from '../services/cardDetailService';
+import { getChineseCardBackUrl, getChineseCardImageUrl } from '../services/cardDetailService';
 import { useCardSearch } from '../context/CardSearchContext';
 
 interface CardInspectorProps {
@@ -15,9 +16,11 @@ export const CardInspector: React.FC<CardInspectorProps> = (props) => {
   const [copiedId, setCopiedId] = useState(false);
   const [copiedDesc, setCopiedDesc] = useState(false);
   const [detail, setDetail] = useState<YgoCard | null>(null);
+  const [imageVariant, setImageVariant] = useState<'sc' | 'back'>('sc');
 
   useEffect(() => {
     if (card) {
+      setImageVariant('sc');
       fetchCardDetailFromYgocdb(card.id, card).then(setDetail).catch(err => {
         console.warn('Failed to fetch detailed info', err);
         setDetail(card);
@@ -50,6 +53,13 @@ export const CardInspector: React.FC<CardInspectorProps> = (props) => {
     return '#10b981';
   };
 
+  const rarityColor: Record<string, string> = {
+    N: '#94a3b8',
+    R: '#60a5fa',
+    SR: '#fbbf24',
+    UR: '#c084fc',
+  };
+
   if (!detail) {
     return (
       <aside className="inspector-panel" style={{ justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
@@ -61,18 +71,16 @@ export const CardInspector: React.FC<CardInspectorProps> = (props) => {
   return (
     <aside className="inspector-panel">
       <img
-        src={detail.imageUrl}
+        src={imageVariant === 'back'
+          ? getChineseCardBackUrl()
+          : getChineseCardImageUrl(detail.imageId || detail.id, imageVariant, 'full')}
         alt={detail.name}
         className="inspector-preview-img"
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = "https://images.ygoprodeck.com/images/cards/back_high.jpg";
-        }}
+        onError={() => setImageVariant('back')}
       />
 
       <div className="inspector-details">
         <div className="inspector-title">{detail.name}</div>
-        {detail.jpName && <div className="inspector-sub">日文: {detail.jpName}</div>}
-        {detail.enName && <div className="inspector-sub">英文: {detail.enName}</div>}
 
         {/* 三大环境 (MasterDuel / OCG / TCG) 禁限对比面板 */}
         <div style={{ background: 'rgba(0,0,0,0.4)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -84,8 +92,8 @@ export const CardInspector: React.FC<CardInspectorProps> = (props) => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.4rem', fontSize: '0.75rem', textAlign: 'center' }}>
             <div style={{ background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '4px' }}>
               <div style={{ color: 'var(--text-dim)', fontSize: '0.65rem' }}>MasterDuel</div>
-              <div style={{ fontWeight: 700, color: getBanColor(detail.banlistInfo?.masterDuel || detail.banlistStatus) }}>
-                {detail.banlistInfo?.masterDuel || detail.banlistStatus || 'Unlimited'}
+              <div style={{ fontWeight: 700, color: getBanColor(detail.banlistInfo?.masterDuel) }}>
+                {detail.banlistInfo?.masterDuel || '未验证'}
               </div>
             </div>
 
@@ -114,6 +122,15 @@ export const CardInspector: React.FC<CardInspectorProps> = (props) => {
             <span className="label">卡牌类型</span>
             <span className="value">{detail.subType || detail.type}</span>
           </div>
+
+          {detail.rarity && (
+            <div className="stat-item">
+              <span className="label">Master Duel 稀有度</span>
+              <span className="value" style={{ color: rarityColor[detail.rarity] || '#fff', fontWeight: 800 }}>
+                {detail.rarity}
+              </span>
+            </div>
+          )}
 
           {detail.attribute && (
             <div className="stat-item">

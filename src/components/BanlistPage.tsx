@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { YgoCard, GameFormat, BanlistPageData } from '../types/ygo';
 import { fetchBanlist } from '../services/ygoApi';
 import { CardInspector } from './CardInspector';
-import { BanlistHistoryModal } from './BanlistHistoryModal';
+import { getChineseCardBackUrl, getChineseCardImageUrl } from '../services/cardDetailService';
 import {
   X, ShieldAlert, Award, RefreshCw, Search, ChevronDown, ChevronRight,
-  AlertTriangle, Ban, Shield, History
+  AlertTriangle, Ban, Shield
 } from 'lucide-react';
 
 interface BanlistPageProps {
@@ -13,10 +13,17 @@ interface BanlistPageProps {
 }
 
 const FORMAT_TABS: { key: GameFormat; label: string; color: string; note?: string }[] = [
-  { key: 'TCG', label: 'TCG 赛制', color: '#3b82f6', note: '实时 API' },
-  { key: 'OCG', label: 'OCG 赛制', color: '#10b981', note: '实时 API' },
   { key: 'MasterDuel', label: 'Master Duel', color: '#f59e0b', note: '自动更新' },
+  { key: 'OCG', label: 'OCG 赛制', color: '#10b981', note: '实时 API' },
+  { key: 'TCG', label: 'TCG 赛制', color: '#3b82f6', note: '实时 API' },
 ];
+
+const RARITY_COLOR: Record<string, string> = {
+  N: '#94a3b8',
+  R: '#60a5fa',
+  SR: '#fbbf24',
+  UR: '#c084fc',
+};
 
 type SectionKey = 'forbidden' | 'limited' | 'semiLimited';
 
@@ -69,9 +76,13 @@ const BanlistCardThumb: React.FC<{
   isSelected: boolean;
   section: SectionConfig;
   onClick: (card: YgoCard) => void;
-}> = ({ card, isSelected, section, onClick }) => {
+  priority?: boolean;
+}> = ({ card, isSelected, section, onClick, priority = false }) => {
   const [imgLoaded, setImgLoaded] = useState(false);
-  const [imgError, setImgError] = useState(false);
+  const [imageVariant, setImageVariant] = useState<'sc' | 'back'>('sc');
+  const imageUrl = imageVariant === 'back'
+    ? getChineseCardBackUrl()
+    : getChineseCardImageUrl(card.imageId || card.id, imageVariant, 'thumb2');
 
   return (
     <div
@@ -93,7 +104,7 @@ const BanlistCardThumb: React.FC<{
       }}
     >
       {/* Loading skeleton */}
-      {!imgLoaded && !imgError && (
+      {!imgLoaded && imageVariant !== 'back' && (
         <div style={{
           position: 'absolute', inset: 0,
           background: 'linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))',
@@ -101,18 +112,41 @@ const BanlistCardThumb: React.FC<{
         }} />
       )}
       <img
-        src={imgError ? 'https://images.ygoprodeck.com/images/cards/back_high.jpg' : (card.imageUrlSmall || card.imageUrl)}
+        src={imageUrl}
         alt={card.name}
-        loading="lazy"
+        loading={priority ? 'eager' : 'lazy'}
+        fetchPriority={priority ? 'high' : 'auto'}
         onLoad={() => setImgLoaded(true)}
-        onError={() => setImgError(true)}
+        onError={() => {
+          setImgLoaded(false);
+          setImageVariant('back');
+        }}
         style={{
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          display: imgLoaded || imgError ? 'block' : 'none',
+          display: 'block',
+          opacity: imgLoaded || imageVariant === 'back' ? 1 : 0,
+          transition: 'opacity 0.2s ease',
         }}
       />
+      {card.rarity && (
+        <div style={{
+          position: 'absolute',
+          top: '4px',
+          left: '4px',
+          zIndex: 3,
+          padding: '2px 5px',
+          borderRadius: '5px',
+          background: 'rgba(2,6,23,0.9)',
+          border: `1px solid ${RARITY_COLOR[card.rarity] || '#94a3b8'}`,
+          color: RARITY_COLOR[card.rarity] || '#e2e8f0',
+          fontSize: '0.62rem',
+          fontWeight: 900,
+        }} title={`Master Duel 稀有度：${card.rarity}`}>
+          {card.rarity}
+        </div>
+      )}
       {/* Hover overlay with name */}
       <div style={{
         position: 'absolute',
@@ -205,13 +239,14 @@ const BanlistSection: React.FC<{
               无匹配卡片
             </span>
           ) : (
-            filtered.map(card => (
+            filtered.map((card, index) => (
               <BanlistCardThumb
                 key={card.id}
                 card={card}
                 section={section}
                 isSelected={selectedCard?.id === card.id}
                 onClick={onCardClick}
+                priority={index < 12}
               />
             ))
           )}
@@ -222,14 +257,13 @@ const BanlistSection: React.FC<{
 };
 
 export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
-  const [format, setFormat] = useState<GameFormat>('TCG');
+  const [format, setFormat] = useState<GameFormat>('MasterDuel');
   const [banlistData, setBanlistData] = useState<BanlistPageData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<YgoCard | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [lastFetch, setLastFetch] = useState<number | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   const loadBanlist = useCallback(async (fmt: GameFormat, forceRefresh = false) => {
     setLoading(true);
@@ -240,8 +274,9 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
       const data = await fetchBanlist(fmt, { forceRefresh });
       setBanlistData(data);
       setLastFetch(data.fetchedAt || Date.now());
-    } catch {
-      setError('加载禁卡表失败，请稍后重试');
+    } catch (loadError) {
+      const detail = loadError instanceof Error ? loadError.message : '未知错误';
+      setError(`无法验证当前禁卡表：${detail}。为避免展示未经证实的数据，本页不会使用本地备用表。`);
     } finally {
       setLoading(false);
     }
@@ -388,26 +423,6 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
             </span>
           </div>
         )}
-
-        <button
-          onClick={() => setHistoryOpen(true)}
-          title="按年份和月份查看各赛制的历史改订"
-          style={{
-            background: 'rgba(245,158,11,0.1)',
-            border: '1px solid rgba(245,158,11,0.35)',
-            color: '#fbbf24',
-            padding: '0.4rem 0.75rem',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.35rem',
-            fontSize: '0.8rem',
-          }}
-        >
-          <History size={14} />
-          <span>历史月表</span>
-        </button>
 
         {/* Refresh */}
         <button
@@ -578,16 +593,6 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
           <CardInspector card={selectedCard} />
         </div>
       </div>
-
-      <BanlistHistoryModal
-        isOpen={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-        currentFormat={format}
-        onSelectCardKeyword={(keyword) => {
-          setSearchTerm(keyword);
-          setSelectedCard(null);
-        }}
-      />
 
       <style>{`
         @keyframes pulse {

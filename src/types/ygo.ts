@@ -24,6 +24,10 @@ export interface YgoCard {
   desc: string;
   imageUrl: string;
   imageUrlSmall?: string;
+  /** 中文数据库实际采用的卡图密码；异画密码可能与规则/卡池密码不同。 */
+  imageId?: number;
+  /** 用于匹配中文数据库的同卡异画密码。 */
+  localizationIds?: number[];
   source: DataSourceType;
   rarity?: string;
   banlistStatus?: string; // 当前对应选定环境的禁限状态
@@ -56,20 +60,6 @@ export interface DataSourceOption {
   desc: string;
   isOnline: boolean;
   speed: string;
-}
-
-export interface BanlistHistoryItem {
-  id: string;
-  format: GameFormat;
-  versionTitle: string;
-  effectiveDate: string;
-  notes?: string;
-  changes: {
-    newForbidden: { id: number; name: string; type: string }[];
-    newLimited: { id: number; name: string; type: string }[];
-    newSemiLimited: { id: number; name: string; type: string }[];
-    newUnlimited: { id: number; name: string; type: string }[];
-  };
 }
 
 /** 实时禁卡表分区数据 */
@@ -138,6 +128,7 @@ export interface YgoProDeckApiItem {
   desc?: string;
   archetype?: string;
   card_images?: Array<{
+    id?: number;
     image_url: string;
     image_url_small?: string;
   }>;
@@ -145,5 +136,10 @@ export interface YgoProDeckApiItem {
     ban_tcg?: string;
     ban_ocg?: string;
   };
+  misc_info?: Array<{
+    formats?: string[];
+    konami_id?: number;
+    md_rarity?: string;
+  }>;
 }
 

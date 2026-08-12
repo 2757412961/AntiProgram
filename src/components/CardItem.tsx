@@ -1,21 +1,30 @@
 import React, { useState } from 'react';
 import { YgoCard } from '../types/ygo';
 import { Ban, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { getChineseCardBackUrl, getChineseCardImageUrl } from '../services/cardDetailService';
 
 interface CardItemProps {
   card: YgoCard;
   isSelected: boolean;
   onSelect: (card: YgoCard) => void;
+  priority?: boolean;
 }
 
-export const CardItem: React.FC<CardItemProps> = ({ card, isSelected, onSelect }) => {
+export const CardItem: React.FC<CardItemProps> = ({ card, isSelected, onSelect, priority = false }) => {
   const [imgLoaded, setImgLoaded] = useState(false);
-  const [imgError, setImgError] = useState(false);
-
-  const fallbackImg = "https://images.ygoprodeck.com/images/cards/back_high.jpg";
+  const [imageVariant, setImageVariant] = useState<'sc' | 'back'>('sc');
+  const imageUrl = imageVariant === 'back'
+    ? getChineseCardBackUrl()
+    : getChineseCardImageUrl(card.imageId || card.id, imageVariant, 'half');
 
   // 获得生效禁限状态
   const banStatus = card.banlistStatus || 'Unlimited';
+  const rarityColor: Record<string, string> = {
+    N: '#94a3b8',
+    R: '#60a5fa',
+    SR: '#fbbf24',
+    UR: '#c084fc',
+  };
 
   // 根据禁限状态定制卡牌外框与边框样式 (限制卡用橙色，准限制用金黄色)
   const getBanBorderClass = () => {
@@ -51,7 +60,7 @@ export const CardItem: React.FC<CardItemProps> = ({ card, isSelected, onSelect }
       }}
     >
       <div className="card-img-wrapper">
-        {!imgLoaded && !imgError && (
+        {!imgLoaded && imageVariant !== 'back' && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: '0.7rem', color: '#666' }}>加载中...</span>
           </div>
@@ -115,13 +124,38 @@ export const CardItem: React.FC<CardItemProps> = ({ card, isSelected, onSelect }
           </div>
         )}
 
+        {card.rarity && (
+          <div style={{
+            position: 'absolute',
+            top: '6px',
+            left: '6px',
+            zIndex: 15,
+            minWidth: '28px',
+            padding: '3px 6px',
+            borderRadius: '6px',
+            background: 'rgba(2,6,23,0.88)',
+            border: `1px solid ${rarityColor[card.rarity] || '#94a3b8'}`,
+            color: rarityColor[card.rarity] || '#e2e8f0',
+            boxShadow: `0 0 10px ${rarityColor[card.rarity] || '#94a3b8'}55`,
+            fontSize: '0.72rem',
+            fontWeight: 900,
+            textAlign: 'center',
+          }} title={`Master Duel 稀有度：${card.rarity}`}>
+            {card.rarity}
+          </div>
+        )}
+
         <img
-          src={imgError ? fallbackImg : card.imageUrl}
+          src={imageUrl}
           alt={card.name}
           className="card-img"
           onLoad={() => setImgLoaded(true)}
-          onError={() => setImgError(true)}
-          loading="lazy"
+          onError={() => {
+            setImgLoaded(false);
+            setImageVariant('back');
+          }}
+          loading={priority ? 'eager' : 'lazy'}
+          fetchPriority={priority ? 'high' : 'auto'}
         />
       </div>
 

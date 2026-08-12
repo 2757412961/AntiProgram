@@ -10,6 +10,7 @@ import {
 } from '../types/ygo';
 import { LATEST_BANLIST_OVERPRIDES } from '../constants/banlistOverrides';
 import { MOCK_LOCAL_CARDS } from '../constants/mockCards';
+import { localizeCardsFromYgocdb } from './cardDetailService';
 
 let cachedYgoProDeckCards: YgoCard[] | null = null;
 let isFetchingYgoProDeckFull = false;
@@ -43,6 +44,56 @@ const banlistCache: Partial<Record<GameFormat, { data: BanlistPageData; ts: numb
 const BANLIST_TTL_MS = 5 * 60 * 1000;
 const MASTER_DUEL_BANLIST_BASE_URL =
   'https://dawnbrandbots.github.io/yaml-yugi-limit-regulation/master-duel';
+const YGOPRODECK_ALL_CARDS_WITH_MISC_URL =
+  'https://db.ygoprodeck.com/api/v7/cardinfo.php?misc=yes';
+const MASTER_DUEL_VECTOR_URL = import.meta.env.DEV
+  ? '/api/master-duel-banlist'
+  : `${MASTER_DUEL_BANLIST_BASE_URL}/current.vector.json`;
+const MASTER_DUEL_CARD_METADATA_URL = import.meta.env.DEV
+  ? '/api/ygoprodeck/cardinfo.php?misc=yes'
+  : YGOPRODECK_ALL_CARDS_WITH_MISC_URL;
+const YAML_YUGI_CARD_BASE_URL = import.meta.env.DEV
+  ? '/api/yaml-yugi-cards'
+  : 'https://cdn.jsdelivr.net/gh/DawnbrandBots/yaml-yugi/data/cards';
+
+interface MasterDuelVectorResponse {
+  date: string;
+  regulation: Record<string, number>;
+}
+
+interface MasterDuelSnapshot {
+  date: string;
+  fetchedAt: number;
+  regulation: Array<[number, 0 | 1 | 2]>;
+  cardsByKonamiId: Map<number, YgoCard>;
+  statusByPasscode: Map<number, string>;
+  rarityByPasscode: Map<number, string>;
+  availablePasscodes: Set<number>;
+}
+
+let masterDuelSnapshot: MasterDuelSnapshot | null = null;
+let masterDuelSnapshotRequest: Promise<MasterDuelSnapshot> | null = null;
+
+function normalizeMasterDuelRarity(rawRarity?: string): string | undefined {
+  if (!rawRarity) return undefined;
+  const normalized = rawRarity.trim().toLowerCase();
+  if (normalized === 'n' || normalized === 'normal' || normalized === 'common') return 'N';
+  if (normalized === 'r' || normalized === 'rare') return 'R';
+  if (normalized === 'sr' || normalized === 'super rare') return 'SR';
+  if (normalized === 'ur' || normalized === 'ultra rare') return 'UR';
+  return undefined;
+}
+
+async function fetchYamlYugiMasterDuelRarity(cardId: number): Promise<string | undefined> {
+  try {
+    const response = await fetch(`${YAML_YUGI_CARD_BASE_URL}/${cardId}.json`);
+    if (!response.ok) return undefined;
+    const payload = await response.json() as { master_duel_rarity?: string };
+    return normalizeMasterDuelRarity(payload.master_duel_rarity);
+  } catch {
+    return undefined;
+  }
+}
 
 export interface FetchBanlistOptions {
   /** 用户主动刷新时绕过 5 分钟内存缓存。 */
@@ -52,7 +103,7 @@ export interface FetchBanlistOptions {
 /**
  * 拉取实时禁卡表数据。
  * - TCG/OCG: 调用 YGOPRODeck `?banlist=1` API 实时获取
- * - MasterDuel: 使用本地 override 规则表（无公开 API）
+ * - MasterDuel: YAML Yugi 当前生效 vector + YGOPRODeck Konami ID 元数据
  */
 export async function fetchBanlist(
   format: GameFormat,
@@ -64,7 +115,7 @@ export async function fetchBanlist(
   }
 
   if (format === 'MasterDuel') {
-    return fetchMasterDuelBanlist();
+    return fetchMasterDuelBanlist(options.forceRefresh);
   }
 
   // TCG / OCG: 使用 YGOPRODeck banlist API
@@ -93,10 +144,16 @@ export async function fetchBanlist(
       else if (status === 'Semi-Limited') semiLimited.push({ ...card, banlistStatus: status });
     }
 
+    const [localizedForbidden, localizedLimited, localizedSemiLimited] = await Promise.all([
+      localizeCardsFromYgocdb(forbidden),
+      localizeCardsFromYgocdb(limited),
+      localizeCardsFromYgocdb(semiLimited),
+    ]);
+
     const data: BanlistPageData = {
-      forbidden,
-      limited,
-      semiLimited,
+      forbidden: localizedForbidden,
+      limited: localizedLimited,
+      semiLimited: localizedSemiLimited,
       fetchedAt: Date.now(),
       source: 'remote',
       sourceLabel: `YGOPRODeck ${format} API`,
@@ -105,207 +162,171 @@ export async function fetchBanlist(
     banlistCache[format] = { data, ts: Date.now() };
     return data;
   } catch (error) {
-    // 保留可用的本地数据，同时让界面明确知道实时请求失败。
     const message = error instanceof Error ? error.message : '未知网络错误';
-    return buildBanlistFromOverrides(
-      format,
-      `实时接口请求失败（${message}），当前展示本地备用规则，可能不是最新数据。`
-    );
+    throw new Error(`${format} 实时禁卡表接口请求失败（${message}）；未使用手写备用规则。`);
   }
 }
 
-/** 从每日更新的社区 JSON 拉取当前 Master Duel 卡表，并通过 YGOPRODeck 补齐卡图与密码。 */
-async function fetchMasterDuelBanlist(): Promise<BanlistPageData> {
-  try {
-    const versionResp = await fetch(`${MASTER_DUEL_BANLIST_BASE_URL}/current.vector.json`);
-    if (!versionResp.ok) throw new Error(`版本接口 HTTP ${versionResp.status}`);
-    const versionData = await versionResp.json() as { date?: string };
-    if (!versionData.date || !/^\d{4}-\d{2}-\d{2}$/.test(versionData.date)) {
-      throw new Error('版本接口缺少有效生效日期');
-    }
+/**
+ * 读取并严格校验当前 Master Duel 禁限表。
+ * vector 的键是 Konami 卡库 ID，不是卡片密码；展示元数据必须按该 ID 一一映射。
+ */
+async function loadMasterDuelSnapshot(): Promise<MasterDuelSnapshot> {
+  const [vectorResponse, cardsResponse] = await Promise.all([
+    fetch(MASTER_DUEL_VECTOR_URL, { cache: 'no-store' }),
+    fetch(MASTER_DUEL_CARD_METADATA_URL, { cache: 'no-store' }),
+  ]);
 
-    const regulationResp = await fetch(
-      `${MASTER_DUEL_BANLIST_BASE_URL}/${versionData.date}.name.json`
-    );
-    if (!regulationResp.ok) throw new Error(`卡表接口 HTTP ${regulationResp.status}`);
-    const regulation = await regulationResp.json() as Record<string, number>;
-    const entries = Object.entries(regulation).filter((entry): entry is [string, number] =>
-      typeof entry[0] === 'string' && [0, 1, 2].includes(entry[1])
-    );
-    if (entries.length === 0) throw new Error('卡表接口返回空数据');
+  if (!vectorResponse.ok) throw new Error(`Master Duel 当前卡表接口 HTTP ${vectorResponse.status}`);
+  if (!cardsResponse.ok) throw new Error(`卡片元数据接口 HTTP ${cardsResponse.status}`);
 
-    const details = await fetchYgoProDeckCardsByNames(entries.map(([name]) => name));
-    const detailByName = new Map(details.map(card => [card.name.toLowerCase(), card]));
-    const forbidden: YgoCard[] = [];
-    const limited: YgoCard[] = [];
-    const semiLimited: YgoCard[] = [];
-
-    for (const [name, limit] of entries) {
-      const status = limit === 0 ? 'Forbidden' : limit === 1 ? 'Limited' : 'Semi-Limited';
-      const detail = detailByName.get(name.toLowerCase()) || createMinimalRemoteCard(name);
-      const card: YgoCard = {
-        ...detail,
-        banlistStatus: status,
-        banlistInfo: {
-          ...detail.banlistInfo,
-          masterDuel: status,
-        },
-      };
-      if (limit === 0) forbidden.push(card);
-      else if (limit === 1) limited.push(card);
-      else semiLimited.push(card);
-    }
-
-    const data: BanlistPageData = {
-      forbidden,
-      limited,
-      semiLimited,
-      fetchedAt: Date.now(),
-      source: 'remote',
-      sourceLabel: 'YAML Yugi Master Duel 自动更新数据',
-      fromCache: false,
-      effectiveDate: versionData.date,
-    };
-    banlistCache.MasterDuel = { data, ts: Date.now() };
-    return data;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '未知网络错误';
-    return buildLocalMasterDuelBanlist(
-      `Master Duel 在线卡表请求失败（${message}），当前展示项目内置备用规则。`
-    );
+  const vector = await vectorResponse.json() as Partial<MasterDuelVectorResponse>;
+  const cardPayload = await cardsResponse.json() as { data?: YgoProDeckApiItem[] };
+  if (!vector.date || !/^\d{4}-\d{2}-\d{2}$/.test(vector.date)) {
+    throw new Error('Master Duel 当前卡表缺少有效生效日期');
   }
-}
-
-async function fetchYgoProDeckCardsByNames(names: string[]): Promise<YgoCard[]> {
-  const batches: string[][] = [];
-  for (let index = 0; index < names.length; index += 20) {
-    batches.push(names.slice(index, index + 20));
+  if (!vector.regulation || typeof vector.regulation !== 'object' || Array.isArray(vector.regulation)) {
+    throw new Error('Master Duel 当前卡表缺少 regulation 对象');
+  }
+  if (!Array.isArray(cardPayload.data) || cardPayload.data.length === 0) {
+    throw new Error('卡片元数据接口返回空数据');
   }
 
-  const fetchBatch = async (batch: string[]): Promise<YgoCard[]> => {
-    const url = `https://db.ygoprodeck.com/api/v7/cardinfo.php?name=${encodeURIComponent(batch.join('|'))}`;
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        if (batch.length === 1) return [];
-        const midpoint = Math.ceil(batch.length / 2);
-        const splitResults = await Promise.all([
-          fetchBatch(batch.slice(0, midpoint)),
-          fetchBatch(batch.slice(midpoint)),
-        ]);
-        return splitResults.flat();
+  const rawEntries = Object.entries(vector.regulation);
+  if (rawEntries.length === 0) throw new Error('Master Duel 当前卡表为空');
+  for (const [rawId, limit] of rawEntries) {
+    if (!/^\d+$/.test(rawId) || !Number.isInteger(limit) || ![0, 1, 2].includes(limit)) {
+      throw new Error(`Master Duel 当前卡表包含无效条目：${rawId}`);
+    }
+  }
+  const regulation = rawEntries.map(([rawId, limit]) =>
+    [Number(rawId), limit as 0 | 1 | 2] as [number, 0 | 1 | 2]
+  );
+
+  const cardsByKonamiId = new Map<number, YgoCard>();
+  const duplicateKonamiIds = new Set<number>();
+  const availablePasscodes = new Set<number>();
+  const rarityByPasscode = new Map<number, string>();
+  const allCards = cardPayload.data.map(item => {
+    const card = mapYgoProDeckToYgoCard(item);
+    for (const misc of item.misc_info || []) {
+      if (misc.formats?.some(format => format.toLowerCase() === 'master duel')) {
+        availablePasscodes.add(card.id);
       }
-      const payload = await response.json();
-      return Array.isArray(payload.data)
-        ? (payload.data as YgoProDeckApiItem[]).map(mapYgoProDeckToYgoCard)
-        : [];
-    } catch {
-      return [];
+      const rarity = normalizeMasterDuelRarity(misc.md_rarity);
+      if (rarity) rarityByPasscode.set(card.id, rarity);
+      if (Number.isInteger(misc.konami_id)) {
+        const konamiId = misc.konami_id!;
+        if (cardsByKonamiId.has(konamiId)) duplicateKonamiIds.add(konamiId);
+        else cardsByKonamiId.set(konamiId, card);
+      }
     }
-  };
+    return card;
+  });
 
-  const results = await Promise.all(batches.map(fetchBatch));
-
-  return results.flat();
-}
-
-function createMinimalRemoteCard(name: string): YgoCard {
-  let hash = 0;
-  for (let index = 0; index < name.length; index++) {
-    hash = ((hash << 5) - hash + name.charCodeAt(index)) | 0;
+  const missingIds = regulation
+    .map(([konamiId]) => konamiId)
+    .filter(konamiId => !cardsByKonamiId.has(konamiId));
+  const ambiguousIds = regulation
+    .map(([konamiId]) => konamiId)
+    .filter(konamiId => duplicateKonamiIds.has(konamiId));
+  if (missingIds.length > 0 || ambiguousIds.length > 0) {
+    throw new Error(
+      `Master Duel 卡表映射不完整：缺失 ${missingIds.length}，重复 ${ambiguousIds.length}`
+    );
   }
-  return {
-    id: -Math.max(1, Math.abs(hash)),
-    name,
-    enName: name,
-    type: 'monster',
-    desc: '卡牌详情暂时无法从 YGOPRODeck 获取。',
-    imageUrl: 'https://images.ygoprodeck.com/images/cards/back_high.jpg',
-    source: 'YGOPRODeck',
+
+  const statusByPasscode = new Map<number, string>();
+  for (const [konamiId, limit] of regulation) {
+    const card = cardsByKonamiId.get(konamiId)!;
+    const status = limit === 0 ? 'Forbidden' : limit === 1 ? 'Limited' : 'Semi-Limited';
+    statusByPasscode.set(card.id, status);
+    // 当前生效规则比卡库的 formats 标签更新得更快时，以规则记录证明该卡属于 MD 数据域。
+    availablePasscodes.add(card.id);
+  }
+
+  // YGOPRODeck 的 MD formats/rarity 更新可能略有延迟。只为其缺项查询 YAML Yugi
+  // 单卡记录中的 master_duel_rarity；两边都未提供时保持未知，绝不猜测。
+  const missingRarityPasscodes = [...availablePasscodes]
+    .filter(passcode => !rarityByPasscode.has(passcode));
+  const rarityFallbacks = await Promise.all(missingRarityPasscodes.map(async passcode => ({
+    passcode,
+    rarity: await fetchYamlYugiMasterDuelRarity(passcode),
+  })));
+  for (const { passcode, rarity } of rarityFallbacks) {
+    if (rarity) rarityByPasscode.set(passcode, rarity);
+  }
+
+  cachedYgoProDeckCards = allCards;
+  cacheState = { status: 'ready', totalCount: allCards.length, loadedCount: allCards.length };
+  notifyCacheListeners();
+  masterDuelSnapshot = {
+    date: vector.date,
+    fetchedAt: Date.now(),
+    regulation,
+    cardsByKonamiId,
+    statusByPasscode,
+    rarityByPasscode,
+    availablePasscodes,
   };
+  return masterDuelSnapshot;
 }
 
-/** 在线数据不可用时，从项目内置 override 规则构建 Master Duel 卡表。 */
-function buildLocalMasterDuelBanlist(warning: string): BanlistPageData {
+async function getMasterDuelSnapshot(forceRefresh = false): Promise<MasterDuelSnapshot> {
+  if (!forceRefresh && masterDuelSnapshot && Date.now() - masterDuelSnapshot.fetchedAt < BANLIST_TTL_MS) {
+    return masterDuelSnapshot;
+  }
+  if (masterDuelSnapshotRequest) return masterDuelSnapshotRequest;
+
+  masterDuelSnapshotRequest = loadMasterDuelSnapshot().finally(() => {
+    masterDuelSnapshotRequest = null;
+  });
+  return masterDuelSnapshotRequest;
+}
+
+async function fetchMasterDuelBanlist(forceRefresh = false): Promise<BanlistPageData> {
+  const snapshot = await getMasterDuelSnapshot(forceRefresh);
+
   const forbidden: YgoCard[] = [];
   const limited: YgoCard[] = [];
   const semiLimited: YgoCard[] = [];
 
-  for (const rule of LATEST_BANLIST_OVERPRIDES) {
-    const status = rule.status.masterDuel;
-    if (status === 'Unlimited') continue;
-
-    const id = rule.ids[0];
-    const name = rule.names?.[0] || `Card #${id}`;
+  for (const [konamiId, limit] of snapshot.regulation) {
+    const detail = snapshot.cardsByKonamiId.get(konamiId);
+    if (!detail) throw new Error(`Master Duel 卡表无法映射 Konami ID ${konamiId}`);
+    const status = limit === 0 ? 'Forbidden' : limit === 1 ? 'Limited' : 'Semi-Limited';
     const card: YgoCard = {
-      id,
-      name,
-      type: 'monster',
-      desc: '',
-      imageUrl: `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg`,
-      source: 'LOCAL_DB',
+      ...detail,
+      rarity: snapshot.rarityByPasscode.get(detail.id),
       banlistStatus: status,
-      banlistInfo: rule.status
+      banlistInfo: { ...detail.banlistInfo, masterDuel: status },
     };
-
-    if (status === 'Forbidden') forbidden.push(card);
-    else if (status === 'Limited') limited.push(card);
-    else if (status === 'Semi-Limited') semiLimited.push(card);
+    if (limit === 0) forbidden.push(card);
+    else if (limit === 1) limited.push(card);
+    else semiLimited.push(card);
   }
 
+  if (forbidden.length + limited.length + semiLimited.length !== snapshot.regulation.length) {
+    throw new Error('Master Duel 卡表分类数量校验失败');
+  }
+
+  const [localizedForbidden, localizedLimited, localizedSemiLimited] = await Promise.all([
+    localizeCardsFromYgocdb(forbidden),
+    localizeCardsFromYgocdb(limited),
+    localizeCardsFromYgocdb(semiLimited),
+  ]);
   const data: BanlistPageData = {
-    forbidden,
-    limited,
-    semiLimited,
-    fetchedAt: Date.now(),
-    source: 'local-master-duel',
-    sourceLabel: '项目内置 Master Duel 规则',
+    forbidden: localizedForbidden,
+    limited: localizedLimited,
+    semiLimited: localizedSemiLimited,
+    fetchedAt: snapshot.fetchedAt,
+    source: 'remote',
+    sourceLabel: 'YAML Yugi 当前生效 Master Duel vector（YGOPRODeck 元数据映射）',
     fromCache: false,
-    effectiveDate: '2026-08-04',
-    warning,
+    effectiveDate: snapshot.date,
   };
-  banlistCache['MasterDuel'] = { data, ts: Date.now() };
+  banlistCache.MasterDuel = { data, ts: Date.now() };
   return data;
-}
-
-/** 回退：从 override 规则构建任意赛制禁卡表 */
-function buildBanlistFromOverrides(format: GameFormat, warning?: string): BanlistPageData {
-  const forbidden: YgoCard[] = [];
-  const limited: YgoCard[] = [];
-  const semiLimited: YgoCard[] = [];
-
-  for (const rule of LATEST_BANLIST_OVERPRIDES) {
-    const status = format === 'MasterDuel'
-      ? rule.status.masterDuel
-      : format === 'OCG'
-      ? rule.status.ocg
-      : rule.status.tcg;
-    if (status === 'Unlimited') continue;
-
-    const id = rule.ids[0];
-    const name = rule.names?.[0] || `Card #${id}`;
-    const card: YgoCard = {
-      id, name, type: 'monster', desc: '',
-      imageUrl: `https://cdn.233.momobako.com/ygopro/pics/${id}.jpg`,
-      source: 'LOCAL_DB',
-      banlistStatus: status,
-      banlistInfo: rule.status
-    };
-    if (status === 'Forbidden') forbidden.push(card);
-    else if (status === 'Limited') limited.push(card);
-    else if (status === 'Semi-Limited') semiLimited.push(card);
-  }
-
-  return {
-    forbidden,
-    limited,
-    semiLimited,
-    fetchedAt: Date.now(),
-    source: 'local-fallback',
-    sourceLabel: `${format} 本地备用规则`,
-    fromCache: false,
-    warning,
-  };
 }
 
 // 根据卡片 ID 或名称，从全量最新禁限注册表匹配获取状态
@@ -394,10 +415,12 @@ function mapYgoProDeckToYgoCard(item: YgoProDeckApiItem): YgoCard {
     desc: item.desc || '',
     imageUrl: item.card_images?.[0]?.image_url || `https://images.ygoprodeck.com/images/cards/${item.id}.jpg`,
     imageUrlSmall: item.card_images?.[0]?.image_url_small,
+    localizationIds: item.card_images
+      ?.map(image => image.id)
+      .filter((id): id is number => Number.isInteger(id) && id !== item.id),
     source: 'YGOPRODeck',
     archetype: item.archetype,
     banlistInfo: matchedOverride || {
-      masterDuel: ocgBan,
       ocg: ocgBan,
       tcg: tcgBan
     }
@@ -406,6 +429,10 @@ function mapYgoProDeckToYgoCard(item: YgoProDeckApiItem): YgoCard {
 
 // 获取卡牌在指定赛制格式 (MasterDuel / OCG / TCG) 下的生效禁限状态
 export function getCardBanStatusForFormat(card: YgoCard, format: GameFormat): string {
+  if (format === 'MasterDuel' && masterDuelSnapshot) {
+    return masterDuelSnapshot.statusByPasscode.get(card.id) || 'Unlimited';
+  }
+
   const override = resolveCardBanInfo(card.id, card.name);
   if (override) {
     if (format === 'MasterDuel') return override.masterDuel;
@@ -414,7 +441,7 @@ export function getCardBanStatusForFormat(card: YgoCard, format: GameFormat): st
   }
 
   if (!card.banlistInfo) return 'Unlimited';
-  if (format === 'MasterDuel') return card.banlistInfo.masterDuel || 'Unlimited';
+  if (format === 'MasterDuel') return 'Unlimited';
   if (format === 'OCG') return card.banlistInfo.ocg || 'Unlimited';
   if (format === 'TCG') return card.banlistInfo.tcg || 'Unlimited';
   return 'Unlimited';
@@ -425,11 +452,19 @@ export async function fetchCards(dataSource: DataSourceType, filters: SearchFilt
   const keyword = filters.keyword.trim();
   let rawList: YgoCard[] = [];
 
+  // Master Duel 状态只来自当前生效 vector。先确保状态快照和卡池均已严格校验，
+  // 不再把 OCG 状态或手写 override 当作 Master Duel 状态。
+  if (filters.format === 'MasterDuel') {
+    await getMasterDuelSnapshot();
+  }
+
   if (dataSource === 'LOCAL_DB') {
     rawList = (cachedYgoProDeckCards && cachedYgoProDeckCards.length > 0) ? cachedYgoProDeckCards : MOCK_LOCAL_CARDS;
   } else if (dataSource === 'YGOCDB') {
     if (!keyword) {
-      rawList = MOCK_LOCAL_CARDS;
+      rawList = (cachedYgoProDeckCards && cachedYgoProDeckCards.length > 0)
+        ? cachedYgoProDeckCards
+        : MOCK_LOCAL_CARDS;
     } else {
       try {
         const resp = await fetch(`https://ygocdb.com/api/v0/?search=${encodeURIComponent(keyword)}`);
@@ -440,7 +475,9 @@ export async function fetchCards(dataSource: DataSourceType, filters: SearchFilt
           }
         }
       } catch {
-        rawList = MOCK_LOCAL_CARDS;
+        rawList = (cachedYgoProDeckCards && cachedYgoProDeckCards.length > 0)
+          ? cachedYgoProDeckCards
+          : MOCK_LOCAL_CARDS;
       }
     }
   } else if (dataSource === 'YGOPRODeck') {
@@ -489,13 +526,24 @@ export async function fetchCards(dataSource: DataSourceType, filters: SearchFilt
   }
 
   // 动态挂载该卡片在当前 GameFormat 下的生效禁限状态
-  return rawList.map(card => {
+  const filteredCards = rawList.filter(card =>
+    filters.format !== 'MasterDuel' || masterDuelSnapshot!.availablePasscodes.has(card.id)
+  ).map(card => {
     const activeBanStatus = getCardBanStatusForFormat(card, filters.format);
+    const masterDuelRarity = filters.format === 'MasterDuel'
+      ? masterDuelSnapshot!.rarityByPasscode.get(card.id)
+      : undefined;
     return {
       ...card,
-      banlistStatus: activeBanStatus
+      rarity: masterDuelRarity || card.rarity,
+      banlistStatus: activeBanStatus,
+      banlistInfo: filters.format === 'MasterDuel'
+        ? { ...card.banlistInfo, masterDuel: activeBanStatus }
+        : card.banlistInfo,
     };
   }).filter(card => filterCard(card, keyword, filters));
+
+  return localizeCardsFromYgocdb(filteredCards);
 }
 
 // 过滤筛选函数

@@ -3,20 +3,199 @@
 // Using global fetch in browser
 import { YgoCard } from '../types/ygo';
 
+interface YgocdbCardDetail {
+  id: number;
+  cid?: number;
+  cn_name?: string;
+  sc_name?: string;
+  md_name?: string;
+  data?: {
+    attribute?: number;
+    level?: number;
+    atk?: number;
+    def?: number;
+  };
+  text?: {
+    name?: string;
+    sc_name?: string;
+    md_name?: string;
+    types?: string;
+    desc?: string;
+  };
+}
+
+const YGOCDB_API_BASE = import.meta.env.DEV ? '/api/ygocdb' : 'https://ygocdb.com/api/v0';
+const CHINESE_IMAGE_BASE = import.meta.env.DEV
+  ? '/chinese-card-images'
+  : 'https://cdn.233.momobako.com';
+const chineseCardCache = new Map<number, YgocdbCardDetail | null>();
+
+function containsChinese(value?: string): boolean {
+  return Boolean(value && /[\u3400-\u9fff]/u.test(value));
+}
+
+function getVerifiedChineseName(raw: YgocdbCardDetail): string | undefined {
+  const names = [
+    raw.md_name,
+    raw.sc_name,
+    raw.cn_name,
+    raw.text?.md_name,
+    raw.text?.sc_name,
+    raw.text?.name,
+  ];
+  // Master Duel 字段偶尔保留日/英文字母标题；用户界面优先采用同一记录内
+  // 已由百鸽提供的简体中文名。只有 NEX、TGX300 这类确无汉字名的卡才保留原名。
+  return names.find(containsChinese) || names.find(Boolean);
+}
+
+export function getChineseCardImageUrl(
+  cardId: number,
+  variant: 'sc' | 'ygopro' = 'sc',
+  size: 'full' | 'half' | 'thumb2' = 'full'
+): string {
+  const suffix = size === 'full' ? '' : `!${size}`;
+  return `${CHINESE_IMAGE_BASE}/ygoimg/${variant}/${cardId}.webp${suffix}`;
+}
+
+export function getChineseCardBackUrl(): string {
+  return import.meta.env.DEV
+    ? '/card-images/images/cards/back_high.jpg'
+    : 'https://images.ygoprodeck.com/images/cards/back_high.jpg';
+}
+
+function applyChineseDetail(card: YgoCard, raw: YgocdbCardDetail): YgoCard {
+  const types = raw.text?.types || card.subType || '';
+  const type: YgoCard['type'] = types.includes('魔法')
+    ? 'spell'
+    : types.includes('陷阱')
+    ? 'trap'
+    : card.type;
+  return {
+    ...card,
+    name: getVerifiedChineseName(raw) || `中文名暂缺（${card.id}）`,
+    type,
+    subType: raw.text?.types || card.subType,
+    desc: raw.text?.desc || card.desc,
+    imageId: raw.id,
+    imageUrl: getChineseCardImageUrl(raw.id, 'sc', 'full'),
+    imageUrlSmall: getChineseCardImageUrl(raw.id, 'sc', 'half'),
+  };
+}
+
+function localizeFromCache(card: YgoCard): YgoCard | null {
+  const detail = [card.id, ...(card.localizationIds || [])]
+    .map(id => chineseCardCache.get(id))
+    .find((candidate): candidate is YgocdbCardDetail => Boolean(candidate));
+  return detail ? applyChineseDetail(card, detail) : null;
+}
+
+async function fetchVerifiedChineseCard(card: YgoCard): Promise<YgoCard | null> {
+  const candidateIds = [card.id, ...(card.localizationIds || [])];
+  for (const id of candidateIds) {
+    const cached = chineseCardCache.get(id);
+    if (cached) return applyChineseDetail(card, cached);
+    if (cached === null) continue;
+
+    try {
+      const response = await fetch(`${YGOCDB_API_BASE}/card/${id}?show=all`);
+      if (response.status === 404) {
+        chineseCardCache.set(id, null);
+        continue;
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const detail = await response.json() as YgocdbCardDetail;
+      if (!detail?.id) throw new Error('接口未返回卡片记录');
+      chineseCardCache.set(id, detail);
+      return applyChineseDetail(card, detail);
+    } catch (error) {
+      console.warn(`百鸽单卡中文数据加载失败：${id}`, error);
+    }
+  }
+  return null;
+}
+
+/** 按密码批量补齐 Master Duel 中文名称与中文卡文，每批遵守百鸽 100 条上限。 */
+export async function localizeCardsFromYgocdb(cards: YgoCard[]): Promise<YgoCard[]> {
+  const lookupIds = [...new Set(cards.flatMap(card => [card.id, ...(card.localizationIds || [])]))];
+  const missingIds = lookupIds
+    .filter(id => !chineseCardCache.has(id));
+
+  const batches: number[][] = [];
+  for (let offset = 0; offset < missingIds.length; offset += 100) {
+    batches.push(missingIds.slice(offset, offset + 100));
+  }
+  const loadBatch = async (ids: number[]) => {
+    try {
+      const response = await fetch(`${YGOCDB_API_BASE}/cardset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!response.ok) {
+        if (ids.length > 1) {
+          const midpoint = Math.ceil(ids.length / 2);
+          await Promise.all([
+            loadBatch(ids.slice(0, midpoint)),
+            loadBatch(ids.slice(midpoint)),
+          ]);
+          return;
+        }
+
+        const id = ids[0];
+        const directResponse = await fetch(`${YGOCDB_API_BASE}/card/${id}?show=all`);
+        if (directResponse.status === 404) {
+          chineseCardCache.set(id, null);
+          return;
+        }
+        if (!directResponse.ok) throw new Error(`单卡 HTTP ${directResponse.status}`);
+        const directDetail = await directResponse.json() as YgocdbCardDetail;
+        chineseCardCache.set(id, directDetail?.id ? directDetail : null);
+        return;
+      }
+      const payload = await response.json() as Record<string, YgocdbCardDetail>;
+      for (const id of ids) chineseCardCache.set(id, payload[String(id)] || null);
+    } catch (error) {
+      console.warn('百鸽批量中文数据加载失败', error);
+      // 网络错误不写入负缓存，下一次刷新仍可重试。
+    }
+  };
+  // 限制并发，避免一次性向公共接口发送过多请求。
+  for (let offset = 0; offset < batches.length; offset += 6) {
+    await Promise.all(batches.slice(offset, offset + 6).map(loadBatch));
+  }
+
+  return cards.map(card => {
+    const localized = localizeFromCache(card);
+    return localized || {
+      ...card,
+      name: `中文名暂缺（${card.id}）`,
+      imageUrl: getChineseCardBackUrl(),
+      imageUrlSmall: getChineseCardBackUrl(),
+    };
+  });
+}
+
 /**
  * Fetch detailed card data from YGOCDB.
  * The API returns Chinese fields (cn_name, sc_name, etc.).
  * If the API fails, fallback to the minimal card object passed in.
  */
 export async function fetchCardDetailFromYgocdb(cardId: number, fallback: Partial<YgoCard> = {}): Promise<YgoCard> {
-  const url = `https://ygocdb.com/api/v0/?search=${cardId}`;
+  const fallbackCard: YgoCard = {
+    id: cardId,
+    name: fallback.name || `中文名暂缺（${cardId}）`,
+    type: fallback.type || 'monster',
+    desc: fallback.desc || '无效果文本',
+    imageUrl: fallback.imageUrl || getChineseCardBackUrl(),
+    ...fallback,
+  } as YgoCard;
   try {
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    // YGOCDB returns { result: [{ ...cardInfo }] }
-    if (data.result && Array.isArray(data.result) && data.result.length > 0) {
-      const raw = data.result[0];
+    const localized = await fetchVerifiedChineseCard(fallbackCard);
+    const detailId = localized?.imageId || cardId;
+    const raw = [detailId, cardId, ...(fallback.localizationIds || [])]
+      .map(id => chineseCardCache.get(id))
+      .find((candidate): candidate is YgocdbCardDetail => Boolean(candidate));
+    if (raw && localized) {
       const attrMap: Record<number, string> = {
         1: 'EARTH', 2: 'WATER', 4: 'FIRE', 8: 'WIND', 16: 'LIGHT', 32: 'DARK', 64: 'DIVINE'
       };
@@ -25,12 +204,11 @@ export async function fetchCardDetailFromYgocdb(cardId: number, fallback: Partia
       let type: 'monster' | 'spell' | 'trap' = 'monster';
       if (isSpell) type = 'spell';
       if (isTrap) type = 'trap';
-      const name = raw.cn_name || raw.sc_name || raw.name || fallback.name || '未知卡片';
       return {
-        id: raw.id,
-        name,
-        jpName: raw.jp_name,
-        enName: raw.en_name,
+        ...localized,
+        id: cardId,
+        jpName: fallback.jpName,
+        enName: fallback.enName,
         type,
         subType: raw.text?.types || (type === 'spell' ? '【魔法卡】' : type === 'trap' ? '【陷阱卡】' : '【怪兽卡】'),
         attribute: raw.data?.attribute ? attrMap[raw.data.attribute] || 'LIGHT' : undefined,
@@ -38,21 +216,27 @@ export async function fetchCardDetailFromYgocdb(cardId: number, fallback: Partia
         atk: raw.data?.atk === -1 ? '?' : raw.data?.atk,
         def: raw.data?.def === -1 ? '?' : raw.data?.def,
         desc: raw.text?.desc || fallback.desc || '无效果文本',
-        imageUrl: `https://cdn.233.momobako.com/ygopro/pics/${raw.id}.jpg`,
+        imageId: detailId,
+        localizationIds: fallback.localizationIds,
+        imageUrl: getChineseCardImageUrl(detailId, 'sc', 'full'),
+        imageUrlSmall: getChineseCardImageUrl(detailId, 'sc', 'half'),
         source: 'YGOCDB',
+        rarity: fallback.rarity,
+        banlistStatus: fallback.banlistStatus,
+        // 详情接口只补充展示字段；禁限状态始终沿用已经过当前规则校验的卡片。
+        // YGOCDB 的 ban_md 不作为当前 Master Duel 权威来源。
         banlistInfo: fallback.banlistInfo || {
-          masterDuel: raw.ban_md ? normalizeBanStatus(raw.ban_md) : 'Unlimited',
-          ocg: raw.ban_ocg ? normalizeBanStatus(raw.ban_ocg) : 'Unlimited',
-          tcg: raw.ban_tcg ? normalizeBanStatus(raw.ban_tcg) : 'Unlimited'
+          ocg: 'Unlimited',
+          tcg: 'Unlimited'
         }
       } as YgoCard;
     }
-    throw new Error('No result data');
+    throw new Error('No verified Chinese result data');
   } catch (e) {
     console.warn('Failed to fetch YGOCDB detail, using fallback', e);
     return {
       id: cardId,
-      name: fallback.name || '未知卡片',
+      name: `中文名暂缺（${cardId}）`,
       jpName: fallback.jpName,
       enName: fallback.enName,
       type: fallback.type || 'monster',
@@ -62,18 +246,12 @@ export async function fetchCardDetailFromYgocdb(cardId: number, fallback: Partia
       atk: fallback.atk,
       def: fallback.def,
       desc: fallback.desc || '无效果文本',
-      imageUrl: fallback.imageUrl || `https://cdn.233.momobako.com/ygopro/pics/${cardId}.jpg`,
+      imageUrl: getChineseCardBackUrl(),
+      imageUrlSmall: getChineseCardBackUrl(),
       source: 'YGOCDB',
-      banlistInfo: fallback.banlistInfo || { masterDuel: 'Unlimited', ocg: 'Unlimited', tcg: 'Unlimited' }
+      rarity: fallback.rarity,
+      banlistStatus: fallback.banlistStatus,
+      banlistInfo: fallback.banlistInfo || { ocg: 'Unlimited', tcg: 'Unlimited' }
     } as YgoCard;
   }
-}
-
-function normalizeBanStatus(status: string | undefined): string {
-  if (!status) return 'Unlimited';
-  const s = status.toLowerCase();
-  if (s.includes('forbidden')) return 'Forbidden';
-  if (s.includes('limited')) return 'Limited';
-  if (s.includes('semi') || s.includes('semi-limited')) return 'Semi-Limited';
-  return 'Unlimited';
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { DataSourceType, DataSourceOption, CacheState } from '../types/ygo';
-import { Zap, Globe, Database, CheckCircle, Wifi, WifiOff, ChevronDown } from 'lucide-react';
+import { Zap, Globe, CheckCircle, Wifi, ChevronDown } from 'lucide-react';
 
 interface DataSourceSelectorProps {
   currentSource: DataSourceType;
@@ -28,16 +28,6 @@ const DATA_SOURCES: (DataSourceOption & { icon: React.ReactNode; accentColor: st
     speed: '~300ms',
     icon: <Globe size={18} />,
     accentColor: '#3b82f6',
-  },
-  {
-    id: 'LOCAL_DB',
-    name: '本地模拟 DB',
-    badge: '零延迟',
-    desc: '离线精选模拟数据 · 无网络要求',
-    isOnline: false,
-    speed: '< 1ms',
-    icon: <Database size={18} />,
-    accentColor: '#10b981',
   },
 ];
 
@@ -197,10 +187,7 @@ export const DataSourceSelector: React.FC<DataSourceSelectorProps> = ({
                     {ds.desc}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.72rem' }}>
-                    {ds.isOnline
-                      ? <Wifi size={12} color="#10b981" />
-                      : <WifiOff size={12} color="var(--text-dim)" />
-                    }
+                    <Wifi size={12} color="#10b981" />
                     <span style={{ color: 'var(--text-dim)' }}>响应约 {ds.speed}</span>
 
                     {/* Cache status for YGOPRODeck */}

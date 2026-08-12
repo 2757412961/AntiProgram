@@ -51,6 +51,8 @@ export const CardSearchProvider: React.FC<{ children: ReactNode }> = ({ children
   useEffect(() => {
     let isSubscribed = true;
     setLoading(true);
+    setCards([]);
+    setSelectedCard(null);
 
     fetchCards(dataSource, filters)
       .then((data) => {
@@ -65,6 +67,10 @@ export const CardSearchProvider: React.FC<{ children: ReactNode }> = ({ children
       })
       .catch((err) => {
         console.error("加载卡片出错:", err);
+        if (isSubscribed) {
+          setCards([]);
+          setSelectedCard(null);
+        }
       })
       .finally(() => {
         if (isSubscribed) setLoading(false);

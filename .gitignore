@@ -16,6 +16,11 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# Optional deck-plaza snapshot database
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+
 # Editor / OS files
 .vscode/
 .idea/

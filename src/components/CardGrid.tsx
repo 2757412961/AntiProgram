@@ -65,6 +65,7 @@ export const CardGrid: React.FC<CardGridProps> = (props) => {
             card={card}
             isSelected={selectedCard?.id === card.id}
             onSelect={onSelectCard}
+            priority={index < 12}
           />
         ))}
       </div>

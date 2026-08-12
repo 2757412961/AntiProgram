@@ -159,6 +159,12 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
   const [searchTerm, setSearchTerm] = useState(filters.keyword);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
+  // Keep the input in sync when another view (for example banlist history)
+  // selects a card and updates the shared filter directly.
+  useEffect(() => {
+    setSearchTerm(filters.keyword);
+  }, [filters.keyword]);
+
   useEffect(() => {
     const handler = setTimeout(() => {
       onFilterChange({ ...filters, keyword: searchTerm });
@@ -173,7 +179,7 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
     onFilterChange(DEFAULT_FILTERS);
   };
 
-  const rarityDisabled = dataSource === 'YGOCDB';
+  const rarityDisabled = dataSource === 'YGOCDB' && filters.format !== 'MasterDuel';
 
   const isBasicFiltered = !!searchTerm || filters.mainType !== 'all' ||
     filters.attribute !== 'ALL' || filters.level !== 'ALL' ||
@@ -190,7 +196,7 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
           <input
             type="text"
             className="search-input"
-            placeholder="输入卡片中文名、英文名、密码或效果关键词（例如：灰流丽 / 增殖的G / 37744402）..."
+            placeholder="输入卡片中文名、密码或效果关键词（例如：灰流丽 / 增殖的G / 37744402）..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -412,19 +418,19 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
             <div
               className="filter-group"
               style={{ borderColor: filters.rarity !== 'ALL' && !rarityDisabled ? '#f472b6' : undefined }}
-              title={rarityDisabled ? '百鸽数据源不提供稀有度数据' : undefined}
+              title={rarityDisabled ? '百鸽数据源不提供该赛制的稀有度数据' : undefined}
             >
               <FilterSelect
                 value={filters.rarity}
                 onChange={v => set({ rarity: v })}
                 disabled={rarityDisabled}
-                title={rarityDisabled ? '百鸽数据源不支持稀有度筛选' : undefined}
+                title={rarityDisabled ? '百鸽数据源不支持该赛制的稀有度筛选' : undefined}
               >
                 <option value="ALL">全部稀有度</option>
-                <option value="N">N（普通）</option>
-                <option value="R">R（稀有）</option>
-                <option value="SR">SR（超稀有）</option>
-                <option value="UR">UR（终极稀有）</option>
+                <option value="N">N</option>
+                <option value="R">R</option>
+                <option value="SR">SR</option>
+                <option value="UR">UR</option>
               </FilterSelect>
               {rarityDisabled && (
                 <span style={{ fontSize: '0.65rem', color: 'var(--text-dim)', marginLeft: '0.3rem', whiteSpace: 'nowrap' }}>
