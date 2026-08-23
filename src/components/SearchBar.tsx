@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { SearchFilters, CardMainType, GameFormat, BanStatusFilter, CacheState } from '../types/ygo';
+import {
+  SearchFilters, CardMainType, GameFormat, BanStatusFilter, CacheState,
+  CardSortField,
+} from '../types/ygo';
 import { useCardSearch } from '../context/CardSearchContext';
 import {
   Search, X, Filter, RotateCcw, ShieldAlert, Award, Database,
-  ChevronDown, ChevronUp, Sparkles, Swords, Layers
+  ChevronDown, ChevronUp, Sparkles, Swords, Layers, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 
 interface SearchBarProps {
@@ -51,6 +54,8 @@ const SPELL_TRAP_SUBTYPES = [
 
 const DEFAULT_FILTERS: SearchFilters = {
   keyword: '',
+  sortBy: 'cardType',
+  sortDirection: 'asc',
   mainType: 'all',
   attribute: 'ALL',
   level: 'ALL',
@@ -183,7 +188,8 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
 
   const isBasicFiltered = !!searchTerm || filters.mainType !== 'all' ||
     filters.attribute !== 'ALL' || filters.level !== 'ALL' ||
-    filters.banStatus !== 'all' || filters.format !== 'MasterDuel';
+    filters.banStatus !== 'all' || filters.format !== 'MasterDuel' ||
+    filters.sortBy !== 'cardType' || filters.sortDirection !== 'asc';
   const isAdvFiltered = hasAdvancedFilter(filters);
   const isFiltered = isBasicFiltered || isAdvFiltered;
 
@@ -264,6 +270,40 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
               {t === 'all' ? '全部' : t === 'monster' ? '怪兽卡' : t === 'spell' ? '魔法卡' : '陷阱卡'}
             </button>
           ))}
+        </div>
+
+        {/* 搜索结果整体排序 */}
+        <div className="filter-group" style={{ borderColor: 'rgba(6,182,212,0.45)' }}>
+          <ArrowUpDown size={14} color="var(--accent-cyan)" />
+          <span className="filter-label">排序:</span>
+          <select
+            className="filter-select"
+            value={filters.sortBy}
+            onChange={e => set({ sortBy: e.target.value as CardSortField })}
+            title="对全部匹配结果排序后再分页显示"
+          >
+            <option value="cardType">卡片类型</option>
+            <option value="name">卡片名称</option>
+            <option value="level">等级/阶级/连接值</option>
+            <option value="atk">ATK 攻击力</option>
+            <option value="def">DEF 守备力</option>
+            <option value="rarity">稀有度</option>
+            <option value="banStatus">禁限状态</option>
+            <option value="id">卡片密码</option>
+            <option value="source">相关度/数据源顺序</option>
+          </select>
+          <button
+            className="sort-direction-btn"
+            disabled={filters.sortBy === 'source'}
+            onClick={() => set({ sortDirection: filters.sortDirection === 'asc' ? 'desc' : 'asc' })}
+            title={filters.sortBy === 'source'
+              ? '数据源顺序不支持升降序切换'
+              : filters.sortDirection === 'asc' ? '当前为正序，点击切换倒序' : '当前为倒序，点击切换正序'}
+            aria-label={filters.sortDirection === 'asc' ? '切换为倒序' : '切换为正序'}
+          >
+            {filters.sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+            <span>{filters.sortDirection === 'asc' ? '正序' : '倒序'}</span>
+          </button>
         </div>
 
         {/* 禁卡状态 */}

@@ -2,6 +2,17 @@ export type DataSourceType = 'YGOCDB' | 'YGOPRODeck' | 'LOCAL_DB';
 export type GameFormat = 'MasterDuel' | 'OCG' | 'TCG';
 export type BanStatusFilter = 'all' | 'forbidden' | 'limited' | 'semi-limited' | 'unlimited';
 export type CardMainType = 'all' | 'monster' | 'spell' | 'trap';
+export type CardSortField =
+  | 'cardType'
+  | 'name'
+  | 'level'
+  | 'atk'
+  | 'def'
+  | 'rarity'
+  | 'banStatus'
+  | 'id'
+  | 'source';
+export type SortDirection = 'asc' | 'desc';
 
 export interface CardBanlistInfo {
   masterDuel?: string; // 'Forbidden' | 'Limited' | 'Semi-Limited' | 'Unlimited'
@@ -37,6 +48,8 @@ export interface YgoCard {
 
 export interface SearchFilters {
   keyword: string;
+  sortBy: CardSortField;
+  sortDirection: SortDirection;
   mainType: CardMainType;
   attribute: string;      // 'ALL' | 'LIGHT' | 'DARK' | 'WATER' | 'FIRE' | 'EARTH' | 'WIND' | 'DIVINE'
   level: string;          // 'ALL' | '1' .. '13'

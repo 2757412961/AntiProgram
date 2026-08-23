@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef, ReactNode } from 'react';
 import { DataSourceType, SearchFilters, YgoCard, CacheState } from '../types/ygo';
 import { fetchCards, subscribeCacheState } from '../services/ygoApi';
+import { sortCards } from '../utils/cardSort';
 
 interface CardSearchContextType {
   dataSource: DataSourceType;
@@ -16,6 +17,8 @@ interface CardSearchContextType {
 
 const initialFilters: SearchFilters = {
   keyword: '',
+  sortBy: 'cardType',
+  sortDirection: 'asc',
   mainType: 'all',
   attribute: 'ALL',
   level: 'ALL',
@@ -40,6 +43,29 @@ export const CardSearchProvider: React.FC<{ children: ReactNode }> = ({ children
   const [loading, setLoading] = useState<boolean>(false);
   const [selectedCard, setSelectedCard] = useState<YgoCard | null>(null);
   const [cacheState, setCacheState] = useState<CacheState>({ status: 'idle', totalCount: 0, loadedCount: 0 });
+  const sortRef = useRef({ sortBy: filters.sortBy, sortDirection: filters.sortDirection });
+  sortRef.current = { sortBy: filters.sortBy, sortDirection: filters.sortDirection };
+  // 排序只作用于已取得的完整结果，不应触发接口重查和中文资料重新本地化。
+  const fetchFilters = useMemo(() => filters, [
+    filters.keyword,
+    filters.mainType,
+    filters.attribute,
+    filters.level,
+    filters.race,
+    filters.format,
+    filters.banStatus,
+    filters.rarity,
+    filters.monsterSubType,
+    filters.spellTrapSubType,
+    filters.atkMin,
+    filters.atkMax,
+    filters.defMin,
+    filters.defMax,
+  ]);
+  const sortedCards = useMemo(
+    () => sortCards(cards, filters.sortBy, filters.sortDirection),
+    [cards, filters.sortBy, filters.sortDirection],
+  );
 
   // 订阅缓存进度
   useEffect(() => {
@@ -54,12 +80,13 @@ export const CardSearchProvider: React.FC<{ children: ReactNode }> = ({ children
     setCards([]);
     setSelectedCard(null);
 
-    fetchCards(dataSource, filters)
+    fetchCards(dataSource, fetchFilters)
       .then((data) => {
         if (isSubscribed) {
           setCards(data);
           if (data.length > 0) {
-            setSelectedCard(data[0]);
+            const { sortBy, sortDirection } = sortRef.current;
+            setSelectedCard(sortCards(data, sortBy, sortDirection)[0]);
           } else {
             setSelectedCard(null);
           }
@@ -79,7 +106,7 @@ export const CardSearchProvider: React.FC<{ children: ReactNode }> = ({ children
     return () => {
       isSubscribed = false;
     };
-  }, [dataSource, filters]);
+  }, [dataSource, fetchFilters]);
 
   return (
     <CardSearchContext.Provider
@@ -88,7 +115,7 @@ export const CardSearchProvider: React.FC<{ children: ReactNode }> = ({ children
         setDataSource,
         filters,
         setFilters,
-        cards,
+        cards: sortedCards,
         loading,
         selectedCard,
         setSelectedCard,
