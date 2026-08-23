@@ -2,7 +2,8 @@ import { decodeHtml, stripTags } from '../lib/html.mjs';
 import { fetchText } from '../lib/http.mjs';
 
 const BASE_URL = 'https://ygoprodeck.com';
-const ALLOW_REMOTE_IMAGES = process.env.DECK_PLAZA_ALLOW_REMOTE_IMAGES === '1';
+const ALLOW_REMOTE_IMAGES = typeof process !== 'undefined'
+  && process.env?.DECK_PLAZA_ALLOW_REMOTE_IMAGES === '1';
 const FORMATS = {
   ocg: {
     category: 'Tournament Meta Decks OCG',

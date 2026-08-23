@@ -45,7 +45,7 @@ export interface DeckSourceStatus {
   freshness: 'fresh' | 'stale' | 'unavailable';
   error: string | null;
   persisted: boolean;
-  storage: 'memory' | 'sqlite';
+  storage: 'memory' | 'sqlite' | 'cache';
 }
 
 export interface DeckPlazaResponse {

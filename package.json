@@ -6,10 +6,15 @@
   "scripts": {
     "dev": "node --watch-path=server server/index.mjs",
     "dev:client": "vite",
+    "predev:worker": "npm run build",
+    "dev:worker": "concurrently --kill-others --names worker,client \"wrangler dev --port 8787\" \"vite --config vite.worker.config.ts\"",
     "build": "tsc && vite build",
     "preview": "node server/index.mjs --production",
+    "preview:worker": "npm run build && wrangler dev --port 8787",
     "start": "node server/index.mjs --production",
-    "test": "node --test server/providers/parsers.test.mjs"
+    "check:worker": "npm run build && wrangler deploy --dry-run",
+    "deploy:cloudflare": "npm run build && wrangler deploy",
+    "test": "node --test server/providers/parsers.test.mjs worker/index.test.mjs"
   },
   "dependencies": {
     "axios": "^1.6.7",
@@ -21,7 +26,9 @@
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^4.2.1",
+    "concurrently": "^10.0.5",
     "typescript": "^5.2.2",
-    "vite": "^5.1.6"
+    "vite": "^5.1.6",
+    "wrangler": "^4.125.0"
   }
 }

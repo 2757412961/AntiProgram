@@ -1,6 +1,3 @@
-import { request as httpRequest } from 'node:http';
-import { request as httpsRequest } from 'node:https';
-
 const MAX_REDIRECTS = 4;
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_BYTES = 4 * 1024 * 1024;
@@ -13,63 +10,69 @@ export async function fetchText(url, options = {}) {
     redirects = MAX_REDIRECTS,
   } = options;
   const target = new URL(url);
-  const request = target.protocol === 'http:' ? httpRequest : httpsRequest;
-
-  return new Promise((resolve, reject) => {
-    const req = request(target, {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(target, {
       method: 'GET',
+      redirect: 'manual',
+      signal: controller.signal,
       headers: {
         accept: 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
         'accept-encoding': 'identity',
         'user-agent': 'AntiProgram-Deck-Plaza/1.0 (+personal deck discovery app)',
         ...headers,
       },
-    }, response => {
-      const status = response.statusCode || 0;
-      const location = response.headers.location;
-      if (status >= 300 && status < 400 && location) {
-        response.resume();
-        if (redirects <= 0) {
-          reject(new Error(`重定向次数过多：${url}`));
-          return;
-        }
-        fetchText(new URL(location, target).toString(), {
-          headers,
-          timeoutMs,
-          maxBytes,
-          redirects: redirects - 1,
-        }).then(resolve, reject);
-        return;
-      }
-
-      if (status < 200 || status >= 300) {
-        response.resume();
-        reject(new Error(`上游请求失败：HTTP ${status}`));
-        return;
-      }
-
-      const chunks = [];
-      let received = 0;
-      response.on('data', chunk => {
-        received += chunk.length;
-        if (received > maxBytes) {
-          req.destroy(new Error(`上游响应超过 ${maxBytes} 字节上限`));
-          return;
-        }
-        chunks.push(chunk);
-      });
-      response.on('end', () => resolve({
-        body: Buffer.concat(chunks).toString('utf8'),
-        headers: response.headers,
-        status,
-      }));
-      response.on('error', reject);
     });
 
-    req.setTimeout(timeoutMs, () => req.destroy(new Error(`上游请求 ${timeoutMs}ms 超时`)));
-    req.on('error', reject);
-    req.end();
-  });
+    const location = response.headers.get('location');
+    if (response.status >= 300 && response.status < 400 && location) {
+      if (redirects <= 0) throw new Error(`重定向次数过多：${url}`);
+      return fetchText(new URL(location, target).toString(), {
+        headers,
+        timeoutMs,
+        maxBytes,
+        redirects: redirects - 1,
+      });
+    }
+    if (!response.ok) throw new Error(`上游请求失败：HTTP ${response.status}`);
+    if (!response.body) return {
+      body: '',
+      headers: Object.fromEntries(response.headers),
+      status: response.status,
+    };
+
+    const reader = response.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > maxBytes) {
+        await reader.cancel();
+        throw new Error(`上游响应超过 ${maxBytes} 字节上限`);
+      }
+      chunks.push(value);
+    }
+
+    const payload = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      payload.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return {
+      body: new TextDecoder().decode(payload),
+      headers: Object.fromEntries(response.headers),
+      status: response.status,
+    };
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error(`上游请求 ${timeoutMs}ms 超时`);
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export function sendJson(response, status, body, extraHeaders = {}) {

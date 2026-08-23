@@ -1,8 +1,10 @@
 # AntiProgram / YGO Card Searcher
 
-本项目使用 Node.js 运行本地 Web 服务，由同一个进程提供 Vite 页面和 API 代理。
+本项目同时支持两套运行方式：本地 Node.js 服务，以及 Cloudflare Worker + Static Assets。两套入口共用 React 前端、API 路径和数据解析逻辑。
 
-## 开发环境启动
+## Node
+
+### 开发环境 Node 启动
 
 推荐使用 Node.js `22.22.2`。在 PowerShell 中进入项目目录后运行：
 
@@ -20,7 +22,7 @@ Vite + Deck Plaza API listening on http://127.0.0.1:3000
 
 > 日常启动只需运行 `npm run dev`。`npm install` 仅在首次使用或依赖发生变化后需要执行。不要使用 `npm run dev:client` 启动完整应用，因为该命令只启动前端，不提供本项目的服务端 API。
 
-## 生产模式启动
+### 生产模式 Node 启动
 
 ```powershell
 npm run build
@@ -28,6 +30,53 @@ npm start
 ```
 
 生产模式默认地址为 <http://127.0.0.1:4173>。
+
+## Cloudflare
+
+### Cloudflare Worker 本地模式
+
+首次运行前安装依赖，然后启动 Worker 本地模拟器与 Vite 页面：
+
+```powershell
+npm install
+npm run dev:worker
+```
+
+浏览器仍访问 <http://127.0.0.1:3000>。Vite 会把 API 请求转发给运行在 `127.0.0.1:8787` 的本地 Worker；修改 Worker 文件会自动重载，修改前端文件会由 Vite 热更新。
+
+两种本地模式可以按需选择：
+
+```text
+npm run dev         Node 服务模式
+npm run dev:worker  Cloudflare Worker 模式
+```
+
+二者默认都占用前端端口 `3000`，不要在同一个终端会话中同时启动。如果需要对照测试，可让 Node 服务使用其他端口：
+
+```powershell
+$env:PORT=3001
+npm run dev
+```
+
+### 部署到 Cloudflare
+
+上线前先验证 Worker 能成功打包：
+
+```powershell
+npm test
+npm run check:worker
+```
+
+首次从本机部署需要登录 Cloudflare：
+
+```powershell
+npx wrangler login
+npm run deploy:cloudflare
+```
+
+也可以在 Cloudflare Dashboard 的 **Workers & Pages > Create application > Import a repository** 中连接 GitHub。构建命令填写 `npm run build`，部署命令填写 `npx wrangler deploy`，生产分支选择 `main`。Worker 名称必须与 `wrangler.jsonc` 中的 `antiprogram-ygo-card-searcher` 一致。
+
+Cloudflare 使用 `dist` 提供静态页面，并由 `worker/index.mjs` 处理 `/api/*`、`/card-images/*` 和 `/chinese-card-images/*`。API 聚合结果使用 Cloudflare Cache API，本地 Node 模式仍可继续使用内存或 SQLite。
 
 ## 常见问题
 

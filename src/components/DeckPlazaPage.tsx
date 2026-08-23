@@ -205,7 +205,11 @@ export const DeckPlazaPage: React.FC = () => {
                   <span>{source.freshness === 'fresh' ? '实时快照' : source.freshness === 'stale' ? '上次可用快照' : '尚不可用'}</span>
                 </div>
                 <div className="source-storage">
-                  <Database size={14} />{source.persisted ? 'SQLite 已入库' : '内存缓存'}
+                  <Database size={14} />{
+                    source.storage === 'cache'
+                      ? 'Cloudflare 边缘缓存'
+                      : source.persisted ? 'SQLite 已入库' : '内存缓存'
+                  }
                 </div>
                 <ExternalLink size={15} />
               </a>
