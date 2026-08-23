@@ -1,6 +1,5 @@
 import React from 'react';
 import { ShieldCheck, ShieldAlert, Gamepad2, History } from 'lucide-react';
-import { DataSourceSelector } from './DataSourceSelector';
 import { useCardSearch } from '../context/CardSearchContext';
 import type { PrimaryView } from '../App';
 
@@ -17,7 +16,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBanlistHistory,
   onOpenMinigame,
 }) => {
-  const { dataSource, setDataSource, cards, cacheState } = useCardSearch();
+  const { cards } = useCardSearch();
 
   return (
     <header className="main-header">
@@ -28,14 +27,6 @@ export const Header: React.FC<HeaderProps> = ({
           <span>YGO Fast Card Searcher • 多数据源模式</span>
         </div>
       </div>
-
-      {activeView === 'cards' && (
-        <DataSourceSelector
-          currentSource={dataSource}
-          onSourceChange={setDataSource}
-          cacheState={cacheState}
-        />
-      )}
 
       <div className="header-actions">
         {/* 小游戏入口按钮 */}

@@ -1,19 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import {
-  SearchFilters, CardMainType, GameFormat, BanStatusFilter, CacheState,
+  SearchFilters, CardMainType, GameFormat, BanStatusFilter, CacheState, DataSourceType,
   CardSortField,
 } from '../types/ygo';
 import { useCardSearch } from '../context/CardSearchContext';
 import {
   Search, X, Filter, RotateCcw, ShieldAlert, Award, Database,
-  ChevronDown, ChevronUp, Sparkles, Swords, Layers, ArrowUp, ArrowDown, ArrowUpDown
+  ChevronDown, ChevronUp, Sparkles, Swords, Layers, ArrowUp, ArrowDown, ArrowUpDown, Star
 } from 'lucide-react';
+import { DataSourceSelector } from './DataSourceSelector';
 
 interface SearchBarProps {
   filters?: SearchFilters;
   onFilterChange?: (newFilters: SearchFilters) => void;
   cacheState?: CacheState;
-  dataSource?: string; // 用于稀有度筛选灰显判断
+  dataSource?: DataSourceType; // 用于稀有度筛选灰显判断
 }
 
 // ── 种族列表 ─────────────────────────────────────────────
@@ -78,8 +79,7 @@ function hasAdvancedFilter(f: SearchFilters): boolean {
     (f.monsterSubType !== 'ALL' && f.monsterSubType !== '') ||
     (f.spellTrapSubType !== 'ALL' && f.spellTrapSubType !== '') ||
     f.atkMin !== '' || f.atkMax !== '' ||
-    f.defMin !== '' || f.defMax !== '' ||
-    (f.race !== 'ALL' && f.race !== '')
+    f.defMin !== '' || f.defMax !== ''
   );
 }
 
@@ -160,6 +160,7 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
   const onFilterChange = props.onFilterChange ?? context.setFilters;
   const cacheState = props.cacheState ?? context.cacheState;
   const dataSource = props.dataSource ?? context.dataSource;
+  const setDataSource = context.setDataSource;
 
   const [searchTerm, setSearchTerm] = useState(filters.keyword);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -188,6 +189,7 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
 
   const isBasicFiltered = !!searchTerm || filters.mainType !== 'all' ||
     filters.attribute !== 'ALL' || filters.level !== 'ALL' ||
+    (filters.race !== 'ALL' && filters.race !== '') ||
     filters.banStatus !== 'all' || filters.format !== 'MasterDuel' ||
     filters.sortBy !== 'cardType' || filters.sortDirection !== 'asc';
   const isAdvFiltered = hasAdvancedFilter(filters);
@@ -195,7 +197,7 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
 
   return (
     <div className="search-container">
-      {/* ── 第一行：搜索框 + 赛制切换 + 缓存状态 ── */}
+      {/* ── 第一行：搜索框 + 赛制切换 + 数据源 + 缓存状态 ── */}
       <div className="input-row" style={{ flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
         <div className="search-input-wrapper" style={{ flex: '1 1 280px' }}>
           <Search className="search-icon" size={18} />
@@ -230,6 +232,13 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
             </button>
           ))}
         </div>
+
+        {/* 数据源选择：仅随查卡页展示，并紧邻赛制环境 */}
+        <DataSourceSelector
+          currentSource={dataSource}
+          onSourceChange={setDataSource}
+          cacheState={cacheState}
+        />
 
         {/* 缓存状态指示 */}
         {cacheState.status === 'loading' && (
@@ -334,8 +343,19 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
           </select>
         </div>
 
+        {/* 种族 */}
+        <div className="filter-group" style={{ borderColor: filters.race !== 'ALL' ? '#34d399' : undefined }}>
+          <Filter size={14} color="#34d399" />
+          <span className="filter-label">种族:</span>
+          <select className="filter-select" value={filters.race} onChange={e => set({ race: e.target.value })}>
+            <option value="ALL">全部种族</option>
+            {RACES.filter(r => r !== 'ALL').map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+
         {/* 星级 */}
         <div className="filter-group">
+          <Star size={14} color="#fbbf24" />
           <span className="filter-label">星级:</span>
           <select className="filter-select" value={filters.level} onChange={e => set({ level: e.target.value })}>
             <option value="ALL">全部星级</option>
@@ -437,17 +457,6 @@ export const SearchBar: React.FC<SearchBarProps> = (props) => {
             <div className="filter-group" style={{ borderColor: filters.spellTrapSubType !== 'ALL' ? '#60a5fa' : undefined }}>
               <FilterSelect value={filters.spellTrapSubType} onChange={v => set({ spellTrapSubType: v })}>
                 {SPELL_TRAP_SUBTYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-              </FilterSelect>
-            </div>
-          </div>
-
-          {/* 种族 */}
-          <div>
-            <FilterSectionTitle icon={<Filter size={12} />} label="种族" color="#34d399" />
-            <div className="filter-group" style={{ borderColor: filters.race !== 'ALL' ? '#34d399' : undefined }}>
-              <FilterSelect value={filters.race} onChange={v => set({ race: v })}>
-                <option value="ALL">全部种族</option>
-                {RACES.filter(r => r !== 'ALL').map(r => <option key={r} value={r}>{r}</option>)}
               </FilterSelect>
             </div>
           </div>
