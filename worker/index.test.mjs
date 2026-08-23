@@ -5,7 +5,6 @@ import worker from './index.mjs';
 function createRuntime() {
   return {
     env: {
-      DECK_PLAZA_ALLOW_REMOTE_IMAGES: '0',
       ASSETS: {
         fetch: async () => new Response('asset-response', {
           headers: { 'content-type': 'text/plain' },

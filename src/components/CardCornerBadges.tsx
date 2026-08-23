@@ -81,8 +81,8 @@ export const CardCornerBadges: React.FC<CardCornerBadgesProps> = ({
         <div
           style={{
             position: 'absolute',
-            top: compact ? '4px' : '6px',
-            right: compact ? '4px' : '6px',
+            bottom: compact ? '4px' : '6px',
+            left: compact ? '4px' : '6px',
             zIndex: 15,
             minWidth: compact ? undefined : '28px',
             padding: compact ? '2px 5px' : '3px 6px',

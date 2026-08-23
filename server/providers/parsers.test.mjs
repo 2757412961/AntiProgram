@@ -6,6 +6,10 @@ import {
 } from './masterDuelBanlistHistory.mjs';
 import { parseMasterDuelMeta } from './masterDuelMeta.mjs';
 import { parseYgoProDeckTournament } from './ygoprodeckTournament.mjs';
+import {
+  parseMasterDuelMetaClassicDeck,
+  parseYgoProDeckClassicDeck,
+} from './classicDeck.mjs';
 import { createMasterDuelBanlistHistoryService } from '../masterDuelBanlistHistoryService.mjs';
 
 function banlistChange(cardId, cardName, from, to) {
@@ -49,6 +53,43 @@ test('parseYgoProDeckTournament parses event deck cards', () => {
   assert.equal(result.decks.length, 2);
   assert.equal(result.rankings[0].name, 'Yummy');
   assert.equal(result.rankings[0].value, 2);
+});
+
+test('parseMasterDuelMetaClassicDeck preserves card sections and amounts', () => {
+  const card = (id, name, amount) => ({ card: { _id: id, name, rarity: 'UR' }, amount });
+  const result = parseMasterDuelMetaClassicDeck({
+    main: [card('main-a', 'Main A', 3), card('main-b', 'Main B', 20)],
+    extra: [card('extra-a', 'Extra A', 2)],
+    side: [card('side-a', 'Side A', 1)],
+  }, {
+    name: 'Example',
+    sourceUrl: 'https://www.masterduelmeta.com/tier-list/deck-types/Example',
+  });
+
+  assert.deepEqual(result.counts, { main: 23, extra: 2, side: 1 });
+  assert.equal(result.main[0].amount, 3);
+  assert.match(result.main[0].imageUrl, /main-a_w200\.webp$/);
+});
+
+test('parseYgoProDeckClassicDeck groups duplicate card images by section', () => {
+  const images = (id, name, amount) => Array.from({ length: amount }, () => (
+    `<img data-card="${id}" data-cardname="${name}" data-src="https://img/${id}.jpg">`
+  )).join('');
+  const html = `
+    <div id="main_deck">${images('1', 'Main &amp; Card', 20)}${images('2', 'Second Card', 3)}</div>
+    <div id="extra_deck">${images('3', 'Extra Card', 2)}</div>
+    <div id="side_deck">${images('4', 'Side Card', 1)}</div>
+    <script>var deckname = "Example Event Deck";</script>`;
+  const result = parseYgoProDeckClassicDeck(html, {
+    name: 'Example',
+    format: 'tcg',
+    sourceUrl: 'https://ygoprodeck.com/deck/example-1',
+  });
+
+  assert.equal(result.sampleName, 'Example Event Deck');
+  assert.deepEqual(result.counts, { main: 23, extra: 2, side: 1 });
+  assert.equal(result.main[0].name, 'Main & Card');
+  assert.equal(result.main[0].amount, 20);
 });
 
 test('parseMasterDuelBanlistHistory merges multiple effective batches linked to one article', () => {

@@ -12,8 +12,5 @@
       "/card-images/*",
       "/chinese-card-images/*"
     ]
-  },
-  "vars": {
-    "DECK_PLAZA_ALLOW_REMOTE_IMAGES": "0"
   }
 }

@@ -7,20 +7,6 @@ const providers = [
   createYgoProDeckTournamentProvider('tcg'),
 ];
 
-function withoutImages(snapshot, allowRemoteImages) {
-  if (!snapshot || allowRemoteImages) return snapshot;
-  const removeImage = ({ imageUrl: _imageUrl, ...item }) => item;
-  return {
-    ...snapshot,
-    rankings: Array.isArray(snapshot.rankings)
-      ? snapshot.rankings.map(removeImage)
-      : Object.fromEntries(Object.entries(snapshot.rankings || {}).map(
-        ([metric, rankings]) => [metric, rankings.map(removeImage)],
-      )),
-    decks: snapshot.decks?.map(removeImage),
-  };
-}
-
 function providerMetadata(provider, snapshot, error = null) {
   return {
     id: provider.sourceId || provider.id,
@@ -42,7 +28,6 @@ function providerMetadata(provider, snapshot, error = null) {
 export async function buildDeckPlaza({
   format = 'master-duel',
   metric,
-  allowRemoteImages = false,
 } = {}) {
   const selected = providers.filter(provider => provider.format === format);
   if (selected.length === 0) {
@@ -64,7 +49,7 @@ export async function buildDeckPlaza({
       return;
     }
 
-    const data = withoutImages(result.value, allowRemoteImages);
+    const data = result.value;
     sources.push(providerMetadata(provider, data));
     if (provider.id === 'master-duel-meta') {
       const selectedMetric = metric === 'popularity' ? 'popularity' : 'power';
@@ -80,6 +65,7 @@ export async function buildDeckPlaza({
   }
 
   return {
+    schemaVersion: 2,
     format,
     metric: format === 'master-duel'
       ? (metric === 'popularity' ? 'popularity' : 'power')

@@ -49,6 +49,7 @@ export interface DeckSourceStatus {
 }
 
 export interface DeckPlazaResponse {
+  schemaVersion: 2;
   format: DeckPlazaFormat;
   metric: DeckPlazaMetric;
   generatedAt: string;
@@ -56,4 +57,33 @@ export interface DeckPlazaResponse {
   decks: TournamentDeck[];
   sources: DeckSourceStatus[];
   warnings: string[];
+}
+
+export interface ClassicDeckCard {
+  id: string;
+  name: string;
+  amount: number;
+  rarity?: string;
+  imageUrl: string;
+  detailUrl: string;
+}
+
+export interface ClassicDeckBuild {
+  schemaVersion: 1;
+  archetypeName: string;
+  sampleName: string;
+  format: DeckPlazaFormat;
+  selection: 'relevance' | 'tournament-sample';
+  selectionReason: string;
+  sourceLabel: string;
+  sourceUrl: string;
+  fetchedAt: string;
+  main: ClassicDeckCard[];
+  extra: ClassicDeckCard[];
+  side: ClassicDeckCard[];
+  counts: {
+    main: number;
+    extra: number;
+    side: number;
+  };
 }

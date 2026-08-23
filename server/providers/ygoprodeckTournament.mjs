@@ -2,8 +2,6 @@ import { decodeHtml, stripTags } from '../lib/html.mjs';
 import { fetchText } from '../lib/http.mjs';
 
 const BASE_URL = 'https://ygoprodeck.com';
-const ALLOW_REMOTE_IMAGES = typeof process !== 'undefined'
-  && process.env?.DECK_PLAZA_ALLOW_REMOTE_IMAGES === '1';
 const FORMATS = {
   ocg: {
     category: 'Tournament Meta Decks OCG',
@@ -50,7 +48,7 @@ export function parseYgoProDeckTournament(html, format, fetchedAt = new Date().t
       playerCount: playersMatch ? Number(playersMatch[1].replaceAll(',', '')) : undefined,
       relativeDate: ageMatch?.[1],
       pilot: pilotMatch?.[1]?.trim(),
-      imageUrl: ALLOW_REMOTE_IMAGES ? decodeHtml(match[1]) : undefined,
+      imageUrl: decodeHtml(match[1]),
       detailUrl,
       weight: placementWeight(placementMatch?.[1] || ''),
     });

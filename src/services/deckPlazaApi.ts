@@ -1,4 +1,5 @@
 import {
+  ClassicDeckBuild,
   DeckPlazaFormat,
   DeckPlazaMetric,
   DeckPlazaResponse,
@@ -13,13 +14,52 @@ interface FetchDeckPlazaOptions {
   signal?: AbortSignal;
 }
 
+interface FetchClassicDeckOptions {
+  item: {
+    name: string;
+    format: DeckPlazaFormat;
+    detailUrl?: string;
+  };
+  signal?: AbortSignal;
+}
+
+export async function fetchClassicDeck({
+  item,
+  signal,
+}: FetchClassicDeckOptions): Promise<ClassicDeckBuild> {
+  const params = new URLSearchParams({
+    name: item.name,
+    format: item.format,
+    schema: '1',
+  });
+  if (item.detailUrl) params.set('detailUrl', item.detailUrl);
+  const response = await fetch(`${API_BASE}/api/v1/deck-plaza/classic-build?${params}`, {
+    signal,
+    headers: { accept: 'application/json' },
+  });
+  const payload = await response.json().catch(() => null) as ClassicDeckBuild | { error?: string } | null;
+  if (!response.ok) {
+    const message = payload && 'error' in payload && payload.error
+      ? payload.error
+      : `经典构筑请求失败：HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  if (!payload || !('main' in payload) || !Array.isArray(payload.main)) {
+    throw new Error('经典构筑接口返回了无效数据');
+  }
+  return payload;
+}
+
 export async function fetchDeckPlaza({
   format,
   metric,
   forceRefresh = false,
   signal,
 }: FetchDeckPlazaOptions): Promise<DeckPlazaResponse> {
-  const params = new URLSearchParams({ format, metric });
+  // Bump this value whenever the normalized response shape changes. It is
+  // intentionally part of the URL so browser and Worker caches cannot serve
+  // an older payload that is valid JSON but lacks newly required fields.
+  const params = new URLSearchParams({ format, metric, schema: '2' });
   if (forceRefresh) params.set('refresh', '1');
   const response = await fetch(`${API_BASE}/api/v1/deck-plaza?${params}`, {
     signal,

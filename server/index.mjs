@@ -10,6 +10,7 @@ const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const envPath = join(rootDir, '.env');
 if (existsSync(envPath)) loadEnvFile(envPath);
 const { getDeckPlaza, getDeckSources } = await import('./deckPlazaService.mjs');
+const { getClassicDeck } = await import('./classicDeckService.mjs');
 const { getMasterDuelBanlistHistory } = await import('./masterDuelBanlistHistoryService.mjs');
 const distDir = join(rootDir, 'dist');
 const isProduction = process.env.NODE_ENV === 'production' || process.argv.includes('--production');
@@ -89,6 +90,15 @@ async function apiHandler(request, response, url) {
       force: url.searchParams.get('refresh') === '1',
     });
     sendJson(response, 200, data);
+    return true;
+  }
+  if (request.method === 'GET' && url.pathname === '/api/v1/deck-plaza/classic-build') {
+    const data = await getClassicDeck({
+      name: url.searchParams.get('name') || '',
+      format: url.searchParams.get('format') || '',
+      detailUrl: url.searchParams.get('detailUrl') || undefined,
+    });
+    sendJson(response, 200, data, { 'cache-control': 'private, max-age=300' });
     return true;
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/deck-sources') {

@@ -9,20 +9,13 @@ const providers = [
 ];
 const repository = await createSnapshotRepository();
 const MANUAL_REFRESH_COOLDOWN_MS = 5 * 60 * 1000;
-const ALLOW_REMOTE_IMAGES = process.env.DECK_PLAZA_ALLOW_REMOTE_IMAGES === '1';
 
-function sanitizeSnapshot(snapshot) {
-  if (!snapshot || ALLOW_REMOTE_IMAGES) return snapshot;
-  const withoutImage = ({ imageUrl: _imageUrl, ...item }) => item;
-  return {
-    ...snapshot,
-    rankings: Array.isArray(snapshot.rankings)
-      ? snapshot.rankings.map(withoutImage)
-      : Object.fromEntries(Object.entries(snapshot.rankings || {}).map(
-        ([metric, rankings]) => [metric, rankings.map(withoutImage)],
-      )),
-    decks: snapshot.decks?.map(withoutImage),
-  };
+function snapshotContainsArtwork(snapshot) {
+  const rankings = Array.isArray(snapshot?.rankings)
+    ? snapshot.rankings
+    : Object.values(snapshot?.rankings || {}).flat();
+  const candidates = [...rankings, ...(snapshot?.decks || [])];
+  return candidates.length === 0 || candidates.some(item => typeof item?.imageUrl === 'string' && item.imageUrl);
 }
 
 const states = new Map(providers.map(provider => [provider.id, {
@@ -40,7 +33,10 @@ async function hydrateProvider(provider, state) {
   state.hydrated = true;
   const snapshot = await repository.load(provider.id);
   if (snapshot) {
-    state.data = sanitizeSnapshot(snapshot);
+    // Snapshots created before artwork support are structurally valid but
+    // cannot power the image-first plaza. Ignore them and refresh upstream.
+    if (!snapshotContainsArtwork(snapshot)) return;
+    state.data = snapshot;
     state.persisted = repository.mode === 'sqlite';
   }
 }
@@ -59,7 +55,7 @@ async function refreshProvider(provider, force = false) {
   state.lastAttemptAt = startedAt;
   state.inflight = provider.load()
     .then(async data => {
-      state.data = sanitizeSnapshot(data);
+      state.data = data;
       state.error = null;
       await repository.save(provider.id, data);
       state.persisted = repository.mode === 'sqlite';
@@ -125,6 +121,7 @@ export async function getDeckPlaza({ format = 'master-duel', metric, force = fal
   }
 
   return {
+    schemaVersion: 2,
     format,
     metric: format === 'master-duel' ? (metric === 'popularity' ? 'popularity' : 'power') : 'top-count',
     generatedAt: new Date().toISOString(),

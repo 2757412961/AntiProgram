@@ -1,4 +1,5 @@
 import { loadMasterDuelBanlistHistory } from '../server/providers/masterDuelBanlistHistory.mjs';
+import { loadClassicDeck } from '../server/providers/classicDeck.mjs';
 import { buildDeckPlaza, getDeckSources } from './deckPlazaService.mjs';
 import { cachedJsonResponse, jsonResponse } from './lib/cache.mjs';
 import { proxyUpstream } from './lib/proxy.mjs';
@@ -79,7 +80,15 @@ async function handleApi(request, url, env, context) {
     }, () => buildDeckPlaza({
       format,
       metric: url.searchParams.get('metric') || undefined,
-      allowRemoteImages: env.DECK_PLAZA_ALLOW_REMOTE_IMAGES === '1',
+    }));
+  }
+  if (request.method === 'GET' && url.pathname === '/api/v1/deck-plaza/classic-build') {
+    return cachedJsonResponse(request, context, {
+      ttlSeconds: 1800,
+    }, () => loadClassicDeck({
+      name: url.searchParams.get('name') || '',
+      format: url.searchParams.get('format') || '',
+      detailUrl: url.searchParams.get('detailUrl') || undefined,
     }));
   }
   if (request.method === 'GET' && url.pathname === '/api/v1/deck-sources') {

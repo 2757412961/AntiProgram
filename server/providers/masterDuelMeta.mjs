@@ -2,8 +2,6 @@ import { decodeHtml } from '../lib/html.mjs';
 import { fetchText } from '../lib/http.mjs';
 
 export const MASTER_DUEL_META_URL = 'https://www.masterduelmeta.com/tier-list';
-const ALLOW_REMOTE_IMAGES = typeof process !== 'undefined'
-  && process.env?.DECK_PLAZA_ALLOW_REMOTE_IMAGES === '1';
 
 const POWER_PATTERN = /<a[^>]+href="\/tier-list\/deck-types\/([^"#?]+)"[\s\S]*?<div class="label[^>]*>([^<]+)<\/div>\s*<\/a>[\s\S]{0,800}?<div class="power-label[^>]*>\s*Power:\s*<b>([\d.]+)<\/b>/gi;
 const POPULARITY_PATTERN = /<a[^>]+href="\/tier-list\/deck-types\/([^"#?]+)"[\s\S]*?<div class="label[^>]*>([^<]+)<\/div>\s*<\/a>[\s\S]{0,800}?<span class="popRank[^>]*>\s*Popularity:\s*<strong>([\d.]+)%<\/strong>/gi;
@@ -20,9 +18,7 @@ function createDeckReference(encodedName, rawName) {
   return {
     name,
     detailUrl: new URL(`/tier-list/deck-types/${encodedName}`, MASTER_DUEL_META_URL).toString(),
-    imageUrl: ALLOW_REMOTE_IMAGES
-      ? `https://imgserv.duellinksmeta.com/v2/mdm/deck-type/${encodeURIComponent(name)}?portrait=true&width=420`
-      : undefined,
+    imageUrl: `https://imgserv.duellinksmeta.com/v2/mdm/deck-type/${encodeURIComponent(name)}?portrait=true&width=640`,
   };
 }
 
