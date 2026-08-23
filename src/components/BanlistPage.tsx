@@ -4,6 +4,7 @@ import { fetchBanlist } from '../services/ygoApi';
 import { CardInspector } from './CardInspector';
 import { CardCornerBadges } from './CardCornerBadges';
 import { getChineseCardBackUrl, getChineseCardImageUrl } from '../services/cardDetailService';
+import { sortCards } from '../utils/cardSort';
 import {
   X, ShieldAlert, Award, RefreshCw, Search, ChevronDown, ChevronRight,
   AlertTriangle, Ban, Shield
@@ -155,13 +156,15 @@ const BanlistSection: React.FC<{
 }> = ({ section, cards, searchTerm, selectedCard, onCardClick }) => {
   const [collapsed, setCollapsed] = useState(false);
 
-  const filtered = searchTerm
+  const matchingCards = searchTerm
     ? cards.filter(c =>
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.enName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.id.toString().includes(searchTerm)
       )
     : cards;
+  // 每个禁限等级内固定按 Master Duel 风格的卡片类型排列，不暴露额外 UI。
+  const filtered = sortCards(matchingCards, 'cardType', 'asc');
 
   return (
     <div style={{

@@ -117,6 +117,8 @@ export interface YgocdbApiItem {
     desc?: string;
   };
   data?: {
+    /** YGOPro 卡片类型位标记：怪兽 0x1、魔法 0x2、陷阱 0x4。 */
+    type?: number;
     attribute?: number;
     level?: number;
     atk?: number;

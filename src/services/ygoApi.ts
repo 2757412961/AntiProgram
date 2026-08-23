@@ -11,6 +11,11 @@ import {
 import { LATEST_BANLIST_OVERPRIDES } from '../constants/banlistOverrides';
 import { MOCK_LOCAL_CARDS } from '../constants/mockCards';
 import { localizeCardsFromYgocdb } from './cardDetailService';
+import {
+  getMainCardTypeFromYgocdbHeader,
+  getMainCardTypeFromYgoProDeckType,
+  getMainCardTypeFromYgoType,
+} from '../utils/cardMetadata';
 
 let cachedYgoProDeckCards: YgoCard[] | null = null;
 let isFetchingYgoProDeckFull = false;
@@ -344,11 +349,9 @@ function normalizeBanStatus(rawStatus?: string): string {
 
 // 数据转换：百鸽 (YGOCDB)
 function mapYgocdbToYgoCard(item: YgocdbApiItem): YgoCard {
-  const isSpell = item.text?.types?.includes('魔法');
-  const isTrap = item.text?.types?.includes('陷阱');
-  let type: 'monster' | 'spell' | 'trap' = 'monster';
-  if (isSpell) type = 'spell';
-  if (isTrap) type = 'trap';
+  const type = getMainCardTypeFromYgoType(item.data?.type)
+    ?? getMainCardTypeFromYgocdbHeader(item.text?.types)
+    ?? 'monster';
 
   const attrMap: Record<number, string> = {
     1: 'EARTH', 2: 'WATER', 4: 'FIRE', 8: 'WIND', 16: 'LIGHT', 32: 'DARK', 64: 'DIVINE'
@@ -381,10 +384,7 @@ function mapYgocdbToYgoCard(item: YgocdbApiItem): YgoCard {
 
 // 数据转换：YGOPRODeck
 function mapYgoProDeckToYgoCard(item: YgoProDeckApiItem): YgoCard {
-  const rawType = item.type?.toLowerCase() || '';
-  let type: 'monster' | 'spell' | 'trap' = 'monster';
-  if (rawType.includes('spell')) type = 'spell';
-  if (rawType.includes('trap')) type = 'trap';
+  const type = getMainCardTypeFromYgoProDeckType(item.type) ?? 'monster';
 
   const name = item.name;
   const matchedOverride = resolveCardBanInfo(item.id, name);

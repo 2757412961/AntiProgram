@@ -2,6 +2,7 @@
 // Service to fetch detailed card information, preferring YGOCDB for Chinese translations.
 // Using global fetch in browser
 import { YgoCard } from '../types/ygo';
+import { getMainCardTypeFromYgoType } from '../utils/cardMetadata';
 
 interface YgocdbCardDetail {
   id: number;
@@ -10,6 +11,7 @@ interface YgocdbCardDetail {
   sc_name?: string;
   md_name?: string;
   data?: {
+    type?: number;
     attribute?: number;
     level?: number;
     atk?: number;
@@ -60,12 +62,9 @@ export function getChineseCardBackUrl(): string {
 }
 
 function applyChineseDetail(card: YgoCard, raw: YgocdbCardDetail): YgoCard {
-  const types = raw.text?.types || card.subType || '';
-  const type: YgoCard['type'] = types.includes('魔法')
-    ? 'spell'
-    : types.includes('陷阱')
-    ? 'trap'
-    : card.type;
+  // 中文化只替换展示字段。若百鸽提供结构化类型位则用其校验，
+  // 否则保留上游 YGOPRODeck/搜索结果已经确认的类型。
+  const type = getMainCardTypeFromYgoType(raw.data?.type) ?? card.type;
   return {
     ...card,
     name: getVerifiedChineseName(raw) || `中文名暂缺（${card.id}）`,
@@ -195,11 +194,7 @@ export async function fetchCardDetailFromYgocdb(cardId: number, fallback: Partia
       const attrMap: Record<number, string> = {
         1: 'EARTH', 2: 'WATER', 4: 'FIRE', 8: 'WIND', 16: 'LIGHT', 32: 'DARK', 64: 'DIVINE'
       };
-      const isSpell = raw.text?.types?.includes('魔法');
-      const isTrap = raw.text?.types?.includes('陷阱');
-      let type: 'monster' | 'spell' | 'trap' = 'monster';
-      if (isSpell) type = 'spell';
-      if (isTrap) type = 'trap';
+      const type = getMainCardTypeFromYgoType(raw.data?.type) ?? localized.type;
       return {
         ...localized,
         id: cardId,
