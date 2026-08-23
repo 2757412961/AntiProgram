@@ -102,7 +102,7 @@ export const DataSourceSelector: React.FC<DataSourceSelectorProps> = ({
           left: 0,
           zIndex: 300,
           width: '320px',
-          background: 'var(--bg-card)',
+          background: '#161b2e',
           border: '1px solid var(--border-color)',
           borderRadius: '12px',
           boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
