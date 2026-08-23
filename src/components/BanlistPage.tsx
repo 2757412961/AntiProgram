@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { YgoCard, GameFormat, BanlistPageData } from '../types/ygo';
 import { fetchBanlist } from '../services/ygoApi';
 import { CardInspector } from './CardInspector';
+import { CardCornerBadges } from './CardCornerBadges';
 import { getChineseCardBackUrl, getChineseCardImageUrl } from '../services/cardDetailService';
 import {
   X, ShieldAlert, Award, RefreshCw, Search, ChevronDown, ChevronRight,
@@ -17,13 +18,6 @@ const FORMAT_TABS: { key: GameFormat; label: string; color: string; note?: strin
   { key: 'OCG', label: 'OCG 赛制', color: '#10b981', note: '实时 API' },
   { key: 'TCG', label: 'TCG 赛制', color: '#3b82f6', note: '实时 API' },
 ];
-
-const RARITY_COLOR: Record<string, string> = {
-  N: '#94a3b8',
-  R: '#60a5fa',
-  SR: '#fbbf24',
-  UR: '#c084fc',
-};
 
 type SectionKey = 'forbidden' | 'limited' | 'semiLimited';
 
@@ -130,23 +124,7 @@ const BanlistCardThumb: React.FC<{
           transition: 'opacity 0.2s ease',
         }}
       />
-      {card.rarity && (
-        <div style={{
-          position: 'absolute',
-          top: '4px',
-          left: '4px',
-          zIndex: 3,
-          padding: '2px 5px',
-          borderRadius: '5px',
-          background: 'rgba(2,6,23,0.9)',
-          border: `1px solid ${RARITY_COLOR[card.rarity] || '#94a3b8'}`,
-          color: RARITY_COLOR[card.rarity] || '#e2e8f0',
-          fontSize: '0.62rem',
-          fontWeight: 900,
-        }} title={`Master Duel 稀有度：${card.rarity}`}>
-          {card.rarity}
-        </div>
-      )}
+      <CardCornerBadges banStatus={card.banlistStatus} rarity={card.rarity} compact />
       {/* Hover overlay with name */}
       <div style={{
         position: 'absolute',

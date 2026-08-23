@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { YgoCard } from '../types/ygo';
-import { Ban, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { getChineseCardBackUrl, getChineseCardImageUrl } from '../services/cardDetailService';
+import { CardCornerBadges } from './CardCornerBadges';
 
 interface CardItemProps {
   card: YgoCard;
@@ -19,12 +19,6 @@ export const CardItem: React.FC<CardItemProps> = ({ card, isSelected, onSelect, 
 
   // 获得生效禁限状态
   const banStatus = card.banlistStatus || 'Unlimited';
-  const rarityColor: Record<string, string> = {
-    N: '#94a3b8',
-    R: '#60a5fa',
-    SR: '#fbbf24',
-    UR: '#c084fc',
-  };
 
   // 根据禁限状态定制卡牌外框与边框样式 (限制卡用橙色，准限制用金黄色)
   const getBanBorderClass = () => {
@@ -77,73 +71,7 @@ export const CardItem: React.FC<CardItemProps> = ({ card, isSelected, onSelect, 
           }} />
         )}
 
-        {/* 特殊禁限图案角标 (禁止 🔴 / 限制 🟠 橙色 / 准限制 🟡 黄色) */}
-        {banStatus !== 'Unlimited' && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '6px',
-              right: '6px',
-              zIndex: 15,
-              padding: '3px 8px',
-              borderRadius: '6px',
-              fontSize: '0.75rem',
-              fontWeight: 800,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.85)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              background: banStatus === 'Forbidden'
-                ? 'linear-gradient(135deg, #dc2626, #991b1b)'
-                : banStatus === 'Limited'
-                ? 'linear-gradient(135deg, #ea580c, #c2410c)' // 限制卡：深橙色
-                : 'linear-gradient(135deg, #d97706, #b45309)', // 准限制：金黄色
-              color: '#fff'
-            }}
-            title={`在当前环境为: ${banStatus}`}
-          >
-            {banStatus === 'Forbidden' && (
-              <>
-                <Ban size={14} color="#fff" />
-                <span>🚫 禁卡 0</span>
-              </>
-            )}
-            {banStatus === 'Limited' && (
-              <>
-                <AlertTriangle size={13} color="#fff" />
-                <span>❶ 限1</span>
-              </>
-            )}
-            {banStatus === 'Semi-Limited' && (
-              <>
-                <ShieldCheck size={13} color="#fff" />
-                <span>❷ 限2</span>
-              </>
-            )}
-          </div>
-        )}
-
-        {card.rarity && (
-          <div style={{
-            position: 'absolute',
-            top: '6px',
-            left: '6px',
-            zIndex: 15,
-            minWidth: '28px',
-            padding: '3px 6px',
-            borderRadius: '6px',
-            background: 'rgba(2,6,23,0.88)',
-            border: `1px solid ${rarityColor[card.rarity] || '#94a3b8'}`,
-            color: rarityColor[card.rarity] || '#e2e8f0',
-            boxShadow: `0 0 10px ${rarityColor[card.rarity] || '#94a3b8'}55`,
-            fontSize: '0.72rem',
-            fontWeight: 900,
-            textAlign: 'center',
-          }} title={`Master Duel 稀有度：${card.rarity}`}>
-            {card.rarity}
-          </div>
-        )}
+        <CardCornerBadges banStatus={banStatus} rarity={card.rarity} />
 
         <img
           src={imageUrl}
