@@ -1,9 +1,13 @@
 import { masterDuelMetaProvider } from '../server/providers/masterDuelMeta.mjs';
+import { ygoprodeckMasterDuelProvider } from '../server/providers/ygoprodeckMasterDuel.mjs';
 import { createYgoProDeckTournamentProvider } from '../server/providers/ygoprodeckTournament.mjs';
+import { roadOfTheKingOcgProvider } from '../server/providers/roadOfTheKing.mjs';
 
 const providers = [
   masterDuelMetaProvider,
+  ygoprodeckMasterDuelProvider,
   createYgoProDeckTournamentProvider('ocg'),
+  roadOfTheKingOcgProvider,
   createYgoProDeckTournamentProvider('tcg'),
 ];
 
@@ -29,7 +33,11 @@ export async function buildDeckPlaza({
   format = 'master-duel',
   metric,
 } = {}) {
-  const selected = providers.filter(provider => provider.format === format);
+  const selected = providers.filter(provider => {
+    if (provider.format !== format) return false;
+    if (format === 'master-duel' && metric !== 'mixed') return provider.id === 'master-duel-meta';
+    return true;
+  });
   if (selected.length === 0) {
     throw Object.assign(new Error(`不支持的赛制：${format}`), { statusCode: 400 });
   }
@@ -52,11 +60,11 @@ export async function buildDeckPlaza({
     const data = result.value;
     sources.push(providerMetadata(provider, data));
     if (provider.id === 'master-duel-meta') {
-      const selectedMetric = metric === 'popularity' ? 'popularity' : 'power';
+      const selectedMetric = metric === 'mixed' || metric === 'popularity' ? 'popularity' : 'power';
       rankings.push(...data.rankings[selectedMetric]);
     } else {
-      rankings.push(...data.rankings);
-      decks.push(...data.decks);
+      rankings.push(...(data.rankings || []));
+      decks.push(...(data.decks || []));
     }
   });
 
@@ -65,10 +73,10 @@ export async function buildDeckPlaza({
   }
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     format,
     metric: format === 'master-duel'
-      ? (metric === 'popularity' ? 'popularity' : 'power')
+      ? (metric === 'mixed' ? 'mixed' : metric === 'popularity' ? 'popularity' : 'power')
       : 'top-count',
     generatedAt: new Date().toISOString(),
     rankings,

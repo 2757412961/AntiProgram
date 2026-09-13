@@ -59,7 +59,7 @@ export async function fetchDeckPlaza({
   // Bump this value whenever the normalized response shape changes. It is
   // intentionally part of the URL so browser and Worker caches cannot serve
   // an older payload that is valid JSON but lacks newly required fields.
-  const params = new URLSearchParams({ format, metric, schema: '2' });
+  const params = new URLSearchParams({ format, metric, schema: '3' });
   if (forceRefresh) params.set('refresh', '1');
   const response = await fetch(`${API_BASE}/api/v1/deck-plaza?${params}`, {
     signal,

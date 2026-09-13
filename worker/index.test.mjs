@@ -26,7 +26,7 @@ test('Worker returns source metadata without invoking an upstream request', asyn
   );
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.sources.length, 3);
+  assert.equal(body.sources.length, 5);
   assert.ok(body.sources.every(source => source.storage === 'cache'));
 });
 

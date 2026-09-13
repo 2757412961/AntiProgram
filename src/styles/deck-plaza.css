@@ -177,6 +177,12 @@
   border-top: 1px solid var(--border-color);
 }
 
+.deck-plaza-toolbar.tier-toolbar {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .deck-metric-switch {
   display: flex;
   gap: 0.35rem;
@@ -500,6 +506,45 @@
   gap: 0.9rem;
 }
 
+.deck-source-ranking-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.deck-source-ranking-group + .deck-source-ranking-group {
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.deck-source-ranking-group > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+
+.deck-source-ranking-group > header span {
+  color: var(--accent-cyan);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.deck-source-ranking-group > header h4 {
+  margin-top: 0.15rem;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.deck-source-ranking-group > header p {
+  max-width: 620px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  text-align: right;
+}
+
 .deck-ranking-card {
   min-width: 0;
   overflow: hidden;
@@ -656,6 +701,13 @@
   color: rgba(165, 243, 252, 0.8);
   font-size: 0.64rem;
   font-weight: 700;
+}
+
+.deck-ranking-sample {
+  display: block;
+  margin: -0.35rem 0.9rem 0.6rem;
+  color: var(--text-muted);
+  font-size: 0.65rem;
 }
 
 .deck-card-link {

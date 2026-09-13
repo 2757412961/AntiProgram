@@ -14,7 +14,7 @@ import { DeckPlazaPage } from './components/DeckPlazaPage';
 import { useCardSearch } from './context/CardSearchContext';
 import './styles/main.css';
 
-export type PrimaryView = 'cards' | 'deck-plaza';
+export type PrimaryView = 'cards' | 'master-duel-tier' | 'deck-plaza';
 type FullPage = 'banlist' | 'mastermind' | 'tank' | null;
 
 const MainAppContent: React.FC = () => {
@@ -57,9 +57,9 @@ const MainAppContent: React.FC = () => {
 
               <CardInspector />
             </main>
-          ) : (
-            <DeckPlazaPage />
-          )}
+          ) : primaryView === 'master-duel-tier'
+            ? <DeckPlazaPage key="master-duel-tier" mode="master-duel-tier" />
+            : <DeckPlazaPage key="deck-plaza" mode="plaza" />}
         </div>
       </div>
 

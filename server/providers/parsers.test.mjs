@@ -5,6 +5,8 @@ import {
   parseMasterDuelBanlistHistory,
 } from './masterDuelBanlistHistory.mjs';
 import { parseMasterDuelMeta } from './masterDuelMeta.mjs';
+import { parseYgoProDeckMasterDuel } from './ygoprodeckMasterDuel.mjs';
+import { parseRoadOfTheKingPosts } from './roadOfTheKing.mjs';
 import { parseYgoProDeckTournament } from './ygoprodeckTournament.mjs';
 import {
   parseMasterDuelMetaClassicDeck,
@@ -38,13 +40,40 @@ function banlistRecord({
 test('parseMasterDuelMeta parses power and popularity independently', () => {
   const html = `
     <a href="/tier-list/deck-types/Branded"><div class="label x">Branded</div></a><div class="power-label x">Power: <b>15.0</b></div>
-    <a href="/tier-list/deck-types/Kewl%20Tune"><div class="label x">Kewl Tune</div></a><div class="power-label x">Power: <b>13.0</b></div>
+    <a href="/tier-list/engines/Kewl%20Tune"><img srcset="https://img/engine?width=50 50w, https://img/engine?width=420 420w"><div class="label x">Kewl Tune Engine</div></a><div class="power-label x">Power: <b>13.0</b></div>
     <a href="/tier-list/deck-types/Branded"><div class="label x">Branded</div></a><span class="popRank x">Popularity: <strong>10.77%</strong></span>
     <a href="/tier-list/deck-types/Kewl%20Tune"><div class="label x">Kewl Tune</div></a><span class="popRank x">Popularity: <strong>8.13%</strong></span>`;
   const result = parseMasterDuelMeta(html);
   assert.equal(result.rankings.power[0].name, 'Branded');
   assert.equal(result.rankings.power[0].tier, 1);
+  assert.equal(result.rankings.power[1].kind, 'engine');
+  assert.match(result.rankings.power[1].imageUrl, /width=640$/);
   assert.equal(result.rankings.popularity[1].value, 8.13);
+});
+
+test('parseYgoProDeckMasterDuel preserves ranked sample statistics', () => {
+  const entry = (name, id, score, wins, losses) => ({
+    tier: score > 200 ? 1 : 2,
+    season: 57,
+    game_mode: 'RANK',
+    archetype_name: name,
+    archetype_name2: null,
+    win_count: wins,
+    loss_count: losses,
+    win_ratio: String(wins / (wins + losses)),
+    duel_count: wins + losses,
+    rank_weighted_score: score,
+    id,
+    name: 'Ranked Duels (Season 57)',
+  });
+  const result = parseYgoProDeckMasterDuel([
+    entry('Branded', 1, 130, 13, 9),
+    entry('Dracotail', 2, 251, 18, 10),
+  ]);
+  assert.equal(result.rankings[0].name, 'Dracotail');
+  assert.equal(result.rankings[0].metric, 'weighted-score');
+  assert.equal(result.rankings[0].duelCount, 28);
+  assert.match(result.rankings[0].detailUrl, /\/RANK\/57\/Dracotail\/$/);
 });
 
 test('parseYgoProDeckTournament parses event deck cards', () => {
@@ -53,6 +82,26 @@ test('parseYgoProDeckTournament parses event deck cards', () => {
   assert.equal(result.decks.length, 2);
   assert.equal(result.rankings[0].name, 'Yummy');
   assert.equal(result.rankings[0].value, 2);
+});
+
+test('parseRoadOfTheKingPosts extracts explicit OCG tournament table rows', () => {
+  const result = parseRoadOfTheKingPosts([{
+    id: 10,
+    date: '2026-09-09T23:00:43',
+    link: 'https://roadoftheking.com/example-ocg/',
+    title: { rendered: 'Example 2026 OCG' },
+    content: { rendered: `
+      <p>Example 2026 OCG was held in Jakarta and had 124 participants.</p>
+      <table><tbody>
+        <tr><td>1st</td><td>Alice</td><td>Elfnote</td><td></td></tr>
+        <tr><td>2nd</td><td>Bob</td><td>Toon</td><td></td></tr>
+      </tbody></table>`,
+    },
+  }]);
+  assert.equal(result.decks.length, 2);
+  assert.equal(result.decks[0].playerCount, 124);
+  assert.equal(result.decks[0].pilot, 'Alice');
+  assert.equal(result.rankings[0].metric, 'top-count');
 });
 
 test('parseMasterDuelMetaClassicDeck preserves card sections and amounts', () => {

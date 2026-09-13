@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, GalleryHorizontalEnd, Sparkles } from 'lucide-react';
+import { BookOpen, GalleryHorizontalEnd, Sparkles, Trophy } from 'lucide-react';
 import type { PrimaryView } from '../App';
 
 interface PrimarySidebarProps {
@@ -18,6 +18,12 @@ const ITEMS: Array<{
     label: '查卡',
     description: '检索卡片与禁限状态',
     icon: <BookOpen size={19} />,
+  },
+  {
+    id: 'master-duel-tier',
+    label: 'Master Duel Tier',
+    description: '赛事强度与引擎排名',
+    icon: <Trophy size={19} />,
   },
   {
     id: 'deck-plaza',

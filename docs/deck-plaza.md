@@ -7,10 +7,14 @@
 | 环境 | 来源 | 接入方式 | 刷新间隔 | 口径 |
 | --- | --- | --- | --- | --- |
 | Master Duel | Master Duel Meta Tier List | 服务端 HTML 解析 | 20 分钟 | Power：最近 100 副社区赛事上位卡组；Popularity：最近两周收录卡组占比 |
+| Master Duel | YGOPRODeck Master Duel 排位统计 | 服务端 JSON 归一化 | 6 小时 | Companion 当前赛季钻石及以上、至少 10 场对局的系列加权分、胜率与样本数 |
 | OCG | YGOPRODeck Tournament Meta Decks OCG | 服务端 HTML 解析 | 60 分钟 | 最新赛事卡表、名次、赛事规模和同名卡组上位数 |
+| OCG | Road of the King | WordPress REST API | 6 小时 | 近期 OCG / Asia English 赛事文章中明确列出的名次、选手、卡组类型和参赛规模 |
 | TCG | YGOPRODeck Tournament Meta Decks | 服务端 HTML 解析 | 60 分钟 | 最新赛事卡表、名次、赛事规模和同名卡组上位数 |
 
-YGOPRODeck 的公开 v7 API 用于卡片元数据、禁限状态和 ID 归一化，但其公开文档没有赛事卡组排名接口。因此卡组广场只抓取其公开分类页，并保留来源链接；不要把内部接口当作稳定契约。
+YGOPRODeck 的公开 v7 API 用于卡片元数据、禁限状态和 ID 归一化，但其公开文档没有赛事卡组或 Master Duel 排位统计接口。卡组广场的 OCG/TCG provider 解析公开分类页，Master Duel provider 归一化公开页面使用的 JSON；两者都保留来源链接，且不把页面内部接口视为稳定契约。
+
+左侧的 **Master Duel Tier** 是独立视图，只使用 Master Duel Meta 的 Power Tier，并默认包含原站 `Show engines` 中的引擎条目。卡组广场的 Master Duel 则按来源分组呈现 Master Duel Meta 近两周热度与 YGOPRODeck 排位统计，不把两个来源的分值合并为一个总榜。
 
 Untapped.gg 的统计来自其 Companion 用户遥测，且部分数据涉及账户或付费权限。当前不抓取该来源；拿到正式 API 或授权后再增加 provider。
 
@@ -18,7 +22,7 @@ Untapped.gg 的统计来自其 Companion 用户遥测，且部分数据涉及账
 
 - **YGOPRODeck v7 API** 是正式公开的卡片资料接口，不提供公开的卡组排名接口。遵守其 20 请求/秒限制，卡片资料应缓存，图片不应持续热链。
 - **Master Duel Meta** 页面存在站内 JSON 接口，但没有公开 API 文档、速率契约或再发布授权。当前使用公开 Tier List HTML，并对解析数量做校验；商业上线前应联系站方取得展示授权。
-- **Road of the King** 提供 RSS 与 WordPress REST API，适合后续补充 OCG/TCG 的赛事名次、选手和卡组类型。文章正文、图片卡表与 OCR 结果不应直接镜像。
+- **Road of the King** 通过 WordPress REST API 补充 OCG / Asia English 的赛事名次、选手和卡组类型。只归一化文章表格中的明确事实，不镜像正文、图片卡表或 OCR 结果。
 - **YGOPRODeck Tournament** 还有未文档化的页面内部接口。获得许可后可以换成 provider，现阶段不把它视为稳定 API。
 - **Untapped.gg** 的条款不允许未经书面许可抓取和公开再展示，connector 保持禁用。
 
@@ -29,6 +33,7 @@ Untapped.gg 的统计来自其 Companion 用户遥测，且部分数据涉及账
 ```http
 GET /api/v1/deck-plaza?format=master-duel&metric=power
 GET /api/v1/deck-plaza?format=master-duel&metric=popularity
+GET /api/v1/deck-plaza?format=master-duel&metric=mixed
 GET /api/v1/deck-plaza?format=ocg
 GET /api/v1/deck-plaza?format=tcg
 GET /api/v1/deck-sources

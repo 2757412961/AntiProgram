@@ -1,5 +1,5 @@
 export type DeckPlazaFormat = 'master-duel' | 'ocg' | 'tcg';
-export type DeckPlazaMetric = 'power' | 'popularity' | 'top-count';
+export type DeckPlazaMetric = 'power' | 'popularity' | 'top-count' | 'mixed' | 'weighted-score';
 
 export interface DeckRanking {
   id: string;
@@ -8,12 +8,18 @@ export interface DeckRanking {
   source: string;
   metric: DeckPlazaMetric;
   value: number;
-  unit: 'power' | 'percent' | 'decks';
+  unit: 'power' | 'percent' | 'decks' | 'score';
   rank: number;
   tier?: number;
   score?: number;
   imageUrl?: string;
   detailUrl?: string;
+  kind?: 'deck' | 'engine';
+  season?: number;
+  winRate?: number;
+  wins?: number;
+  losses?: number;
+  duelCount?: number;
 }
 
 export interface TournamentDeck {
@@ -49,7 +55,7 @@ export interface DeckSourceStatus {
 }
 
 export interface DeckPlazaResponse {
-  schemaVersion: 2;
+  schemaVersion: 3;
   format: DeckPlazaFormat;
   metric: DeckPlazaMetric;
   generatedAt: string;

@@ -1,10 +1,14 @@
 import { masterDuelMetaProvider } from './providers/masterDuelMeta.mjs';
+import { ygoprodeckMasterDuelProvider } from './providers/ygoprodeckMasterDuel.mjs';
 import { createYgoProDeckTournamentProvider } from './providers/ygoprodeckTournament.mjs';
+import { roadOfTheKingOcgProvider } from './providers/roadOfTheKing.mjs';
 import { createSnapshotRepository } from './storage/snapshotRepository.mjs';
 
 const providers = [
   masterDuelMetaProvider,
+  ygoprodeckMasterDuelProvider,
   createYgoProDeckTournamentProvider('ocg'),
+  roadOfTheKingOcgProvider,
   createYgoProDeckTournamentProvider('tcg'),
 ];
 const repository = await createSnapshotRepository();
@@ -16,6 +20,20 @@ function snapshotContainsArtwork(snapshot) {
     : Object.values(snapshot?.rankings || {}).flat();
   const candidates = [...rankings, ...(snapshot?.decks || [])];
   return candidates.length === 0 || candidates.some(item => typeof item?.imageUrl === 'string' && item.imageUrl);
+}
+
+function snapshotMatchesProviderSchema(provider, snapshot) {
+  if (provider.id === 'road-of-the-king-ocg') {
+    return Array.isArray(snapshot?.decks)
+      && snapshot.decks.length > 0
+      && snapshot.decks.every(item => item?.source === 'road-of-the-king' && item?.detailUrl);
+  }
+  if (!snapshotContainsArtwork(snapshot)) return false;
+  if (provider.id !== 'master-duel-meta') return true;
+  const powerRankings = snapshot?.rankings?.power;
+  return Array.isArray(powerRankings)
+    && powerRankings.length > 0
+    && powerRankings.every(item => item?.kind === 'deck' || item?.kind === 'engine');
 }
 
 const states = new Map(providers.map(provider => [provider.id, {
@@ -35,7 +53,7 @@ async function hydrateProvider(provider, state) {
   if (snapshot) {
     // Snapshots created before artwork support are structurally valid but
     // cannot power the image-first plaza. Ignore them and refresh upstream.
-    if (!snapshotContainsArtwork(snapshot)) return;
+    if (!snapshotMatchesProviderSchema(provider, snapshot)) return;
     state.data = snapshot;
     state.persisted = repository.mode === 'sqlite';
   }
@@ -92,7 +110,11 @@ function providerMetadata(provider, state) {
 }
 
 export async function getDeckPlaza({ format = 'master-duel', metric, force = false } = {}) {
-  const selected = providers.filter(provider => provider.format === format);
+  const selected = providers.filter(provider => {
+    if (provider.format !== format) return false;
+    if (format === 'master-duel' && metric !== 'mixed') return provider.id === 'master-duel-meta';
+    return true;
+  });
   if (selected.length === 0) throw Object.assign(new Error(`不支持的赛制：${format}`), { statusCode: 400 });
 
   const results = await Promise.allSettled(selected.map(provider => refreshProvider(provider, force)));
@@ -108,11 +130,11 @@ export async function getDeckPlaza({ format = 'master-duel', metric, force = fal
     }
     const data = result.value;
     if (provider.id === 'master-duel-meta') {
-      const selectedMetric = metric === 'popularity' ? 'popularity' : 'power';
+      const selectedMetric = metric === 'mixed' || metric === 'popularity' ? 'popularity' : 'power';
       rankings.push(...data.rankings[selectedMetric]);
     } else {
-      rankings.push(...data.rankings);
-      decks.push(...data.decks);
+      rankings.push(...(data.rankings || []));
+      decks.push(...(data.decks || []));
     }
   });
 
@@ -121,9 +143,11 @@ export async function getDeckPlaza({ format = 'master-duel', metric, force = fal
   }
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     format,
-    metric: format === 'master-duel' ? (metric === 'popularity' ? 'popularity' : 'power') : 'top-count',
+    metric: format === 'master-duel'
+      ? (metric === 'mixed' ? 'mixed' : metric === 'popularity' ? 'popularity' : 'power')
+      : 'top-count',
     generatedAt: new Date().toISOString(),
     rankings,
     decks,

@@ -11,7 +11,6 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
-  Trophy,
   Users,
   X,
 } from 'lucide-react';
@@ -27,7 +26,7 @@ import {
 import '../styles/deck-plaza.css';
 
 const FORMAT_OPTIONS: Array<{ id: DeckPlazaFormat; label: string; hint: string }> = [
-  { id: 'master-duel', label: 'Master Duel', hint: '天梯与社区赛' },
+  { id: 'master-duel', label: 'Master Duel', hint: '多来源环境趋势' },
   { id: 'ocg', label: 'OCG', hint: '亚洲实体赛' },
   { id: 'tcg', label: 'TCG', hint: '欧美实体赛' },
 ];
@@ -63,12 +62,15 @@ function formatTimestamp(value: string | null): string {
 function formatMetric(item: DeckRanking): string {
   if (item.unit === 'percent') return `${item.value.toFixed(2).replace(/\.00$/, '')}%`;
   if (item.unit === 'decks') return `${item.value} 副上位`;
+  if (item.unit === 'score') return `${item.value.toFixed(0)} 分`;
   return item.value.toFixed(1);
 }
 
 function metricLabel(metric: DeckPlazaMetric): string {
   if (metric === 'popularity') return '近两周热度';
   if (metric === 'top-count') return '赛事上位数';
+  if (metric === 'weighted-score') return '排位赛加权分';
+  if (metric === 'mixed') return '多来源环境趋势';
   return '赛事 Power';
 }
 
@@ -88,7 +90,7 @@ const DeckRankingCard: React.FC<{ item: DeckRanking; onSelect: (item: DeckRankin
       type="button"
       className="deck-ranking-open"
       onClick={() => onSelect(item)}
-      aria-label={`打开 ${item.name} 经典构筑`}
+      aria-label={item.kind === 'engine' ? `查看 ${item.name} 引擎详情` : `打开 ${item.name} 经典构筑`}
     >
       <div className="deck-ranking-art">
         <span className="deck-ranking-monogram" aria-hidden="true">
@@ -104,7 +106,7 @@ const DeckRankingCard: React.FC<{ item: DeckRanking; onSelect: (item: DeckRankin
           />
         )}
         <span className="deck-rank-number">#{item.rank}</span>
-        {item.tier && <span className={`deck-tier tier-${item.tier}`}>TIER {item.tier}</span>}
+        {item.tier && <span className={`deck-tier tier-${item.tier}`}>{item.kind === 'engine' ? 'ENGINE · ' : ''}TIER {item.tier}</span>}
       </div>
       <div className="deck-ranking-content">
         <div>
@@ -113,7 +115,10 @@ const DeckRankingCard: React.FC<{ item: DeckRanking; onSelect: (item: DeckRankin
         </div>
         <strong className="deck-metric-value">{formatMetric(item)}</strong>
       </div>
-      <span className="deck-open-hint"><Sparkles size={13} />查看经典构筑</span>
+      {typeof item.winRate === 'number' && (
+        <span className="deck-ranking-sample">胜率 {item.winRate.toFixed(1)}% · {item.duelCount} 场</span>
+      )}
+      <span className="deck-open-hint"><Sparkles size={13} />{item.kind === 'engine' ? '查看引擎详情' : '查看经典构筑'}</span>
     </button>
     {item.detailUrl && (
       <a href={item.detailUrl} target="_blank" rel="noreferrer" className="deck-card-link" aria-label={`查看 ${item.name} 来源详情`}>
@@ -276,9 +281,15 @@ const ClassicDeckModal: React.FC<{
   );
 };
 
-export const DeckPlazaPage: React.FC = () => {
+interface DeckPlazaPageProps {
+  mode?: 'plaza' | 'master-duel-tier';
+}
+
+export const DeckPlazaPage: React.FC<DeckPlazaPageProps> = ({ mode = 'plaza' }) => {
+  const isTierView = mode === 'master-duel-tier';
   const [format, setFormat] = useState<DeckPlazaFormat>('master-duel');
-  const [metric, setMetric] = useState<DeckPlazaMetric>('power');
+  const [metric, setMetric] = useState<DeckPlazaMetric>(isTierView ? 'power' : 'mixed');
+  const [showEngines, setShowEngines] = useState(true);
   const [query, setQuery] = useState('');
   const [data, setData] = useState<DeckPlazaResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -338,9 +349,11 @@ export const DeckPlazaPage: React.FC = () => {
 
   const rankings = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return data?.rankings || [];
-    return (data?.rankings || []).filter(item => item.name.toLowerCase().includes(keyword));
-  }, [data, query]);
+    return (data?.rankings || []).filter(item => {
+      if (isTierView && !showEngines && item.kind === 'engine') return false;
+      return !keyword || item.name.toLowerCase().includes(keyword);
+    });
+  }, [data, isTierView, query, showEngines]);
 
   const decks = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -353,20 +366,39 @@ export const DeckPlazaPage: React.FC = () => {
   }, [data, query]);
 
   const tierGroups = useMemo(() => {
-    if (format !== 'master-duel' || metric !== 'power') return [];
+    if (!isTierView) return [];
     return [1, 2, 3, 4]
       .map(tier => ({
         tier,
         items: rankings.filter(item => item.tier === tier),
       }))
       .filter(group => group.items.length > 0);
-  }, [format, metric, rankings]);
+  }, [isTierView, rankings]);
+
+  const sourceRankingGroups = useMemo(() => {
+    if (!data || data.sources.length < 2) return [];
+    const groups = new Map<string, DeckRanking[]>();
+    rankings.forEach(item => groups.set(item.source, [...(groups.get(item.source) || []), item]));
+    return [...groups.entries()].map(([sourceId, items]) => ({
+      sourceId,
+      items,
+      source: data.sources.find(candidate => candidate.id === sourceId || candidate.instanceId === sourceId),
+    }));
+  }, [data, rankings]);
 
   const handleFormatChange = (nextFormat: DeckPlazaFormat) => {
     setSelectedDeck(null);
     setFormat(nextFormat);
-    setMetric(nextFormat === 'master-duel' ? 'power' : 'top-count');
+    setMetric(nextFormat === 'master-duel' ? 'mixed' : 'top-count');
     setQuery('');
+  };
+
+  const handleRankingSelect = (item: DeckRanking) => {
+    if (item.kind === 'engine' && item.detailUrl) {
+      window.open(item.detailUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setSelectedDeck(item);
   };
 
   const handleRefresh = async () => {
@@ -388,9 +420,11 @@ export const DeckPlazaPage: React.FC = () => {
     <main className="deck-plaza-page">
       <section className="deck-plaza-hero">
         <div className="deck-plaza-hero-copy">
-          <div className="deck-plaza-eyebrow"><Activity size={15} /> LIVE META DISCOVERY</div>
-          <h2>卡组广场</h2>
-          <p>把不同环境的赛事上位与流行度分开呈现。每一项都保留统计口径、更新时间和原始来源。</p>
+          <div className="deck-plaza-eyebrow"><Activity size={15} /> {isTierView ? 'MASTER DUEL POWER RANKING' : 'LIVE META DISCOVERY'}</div>
+          <h2>{isTierView ? 'Master Duel Tier' : '卡组广场'}</h2>
+          <p>{isTierView
+            ? '独立呈现 Master Duel Meta 的社区赛事 Power Tier，并可按原站口径显示或隐藏引擎。'
+            : 'Master Duel 聚合社区赛与排位样本；OCG / TCG 保持赛事卡表口径。所有来源分开展示，不混算分数。'}</p>
         </div>
         <div className="deck-plaza-hero-actions">
           <div className="deck-plaza-updated">
@@ -405,29 +439,28 @@ export const DeckPlazaPage: React.FC = () => {
       </section>
 
       <section className="deck-plaza-controls" aria-label="卡组广场筛选">
-        <div className="deck-format-tabs" role="tablist" aria-label="游戏环境">
-          {FORMAT_OPTIONS.map(option => (
-            <button
-              key={option.id}
-              role="tab"
-              aria-selected={format === option.id}
-              className={format === option.id ? 'active' : ''}
-              onClick={() => handleFormatChange(option.id)}
-            >
-              <strong>{option.label}</strong>
-              <span>{option.hint}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="deck-plaza-toolbar">
-          {format === 'master-duel' && (
-            <div className="deck-metric-switch" aria-label="统计口径">
-              <button className={metric === 'power' ? 'active' : ''} onClick={() => setMetric('power')}>
-                <Trophy size={15} />赛事强度
+        {!isTierView && (
+          <div className="deck-format-tabs" role="tablist" aria-label="游戏环境">
+            {FORMAT_OPTIONS.map(option => (
+              <button
+                key={option.id}
+                role="tab"
+                aria-selected={format === option.id}
+                className={format === option.id ? 'active' : ''}
+                onClick={() => handleFormatChange(option.id)}
+              >
+                <strong>{option.label}</strong>
+                <span>{option.hint}</span>
               </button>
-              <button className={metric === 'popularity' ? 'active' : ''} onClick={() => setMetric('popularity')}>
-                <Flame size={15} />近两周热度
+            ))}
+          </div>
+        )}
+
+        <div className={`deck-plaza-toolbar ${isTierView ? 'tier-toolbar' : ''}`}>
+          {isTierView && (
+            <div className="deck-metric-switch" aria-label="Tier 显示选项">
+              <button className={showEngines ? 'active' : ''} onClick={() => setShowEngines(value => !value)}>
+                <Flame size={15} />Show engines
               </button>
             </div>
           )}
@@ -488,7 +521,7 @@ export const DeckPlazaPage: React.FC = () => {
             <div className="deck-section-heading">
               <div>
                 <span className="section-kicker">RANKING</span>
-                <h3>{metricLabel(data.metric)}</h3>
+                <h3>{isTierView ? 'Master Duel Meta Tier' : metricLabel(data.metric)}</h3>
               </div>
               <div className="deck-methodology">
                 <ShieldCheck size={16} />
@@ -511,14 +544,31 @@ export const DeckPlazaPage: React.FC = () => {
                         <em>{group.items.length} 个构筑</em>
                       </header>
                       <div className="deck-tier-cards">
-                        {group.items.map(item => <DeckRankingCard item={item} onSelect={setSelectedDeck} key={item.id} />)}
+                        {group.items.map(item => <DeckRankingCard item={item} onSelect={handleRankingSelect} key={item.id} />)}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : sourceRankingGroups.length > 0 ? (
+                <div className="deck-source-ranking-groups">
+                  {sourceRankingGroups.map(group => (
+                    <section className="deck-source-ranking-group" key={group.sourceId}>
+                      <header>
+                        <div>
+                          <span>{group.source?.label || group.sourceId}</span>
+                          <h4>{metricLabel(group.items[0].metric)}</h4>
+                        </div>
+                        <p>{group.source?.methodology[group.items[0].metric] || '来源独立统计口径'}</p>
+                      </header>
+                      <div className="deck-ranking-grid">
+                        {group.items.map(item => <DeckRankingCard item={item} onSelect={handleRankingSelect} key={item.id} />)}
                       </div>
                     </section>
                   ))}
                 </div>
               ) : (
                 <div className="deck-ranking-grid">
-                  {rankings.map(item => <DeckRankingCard item={item} onSelect={setSelectedDeck} key={item.id} />)}
+                  {rankings.map(item => <DeckRankingCard item={item} onSelect={handleRankingSelect} key={item.id} />)}
                 </div>
               )
             ) : (
@@ -562,6 +612,7 @@ export const DeckPlazaPage: React.FC = () => {
                       {deck.playerCount && <span><Users size={13} />约 {deck.playerCount} 人</span>}
                       {deck.pilot && <span>选手 {deck.pilot}</span>}
                       {deck.relativeDate && <span>{deck.relativeDate}</span>}
+                      <span>{data.sources.find(source => source.id === deck.source)?.label || deck.source}</span>
                     </div>
                     <ExternalLink size={15} />
                   </a>

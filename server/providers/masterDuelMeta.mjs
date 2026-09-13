@@ -3,8 +3,8 @@ import { fetchText } from '../lib/http.mjs';
 
 export const MASTER_DUEL_META_URL = 'https://www.masterduelmeta.com/tier-list';
 
-const POWER_PATTERN = /<a[^>]+href="\/tier-list\/deck-types\/([^"#?]+)"[\s\S]*?<div class="label[^>]*>([^<]+)<\/div>\s*<\/a>[\s\S]{0,800}?<div class="power-label[^>]*>\s*Power:\s*<b>([\d.]+)<\/b>/gi;
-const POPULARITY_PATTERN = /<a[^>]+href="\/tier-list\/deck-types\/([^"#?]+)"[\s\S]*?<div class="label[^>]*>([^<]+)<\/div>\s*<\/a>[\s\S]{0,800}?<span class="popRank[^>]*>\s*Popularity:\s*<strong>([\d.]+)%<\/strong>/gi;
+const POWER_PATTERN = /<a[^>]+href="\/tier-list\/(deck-types|engines)\/([^"#?]+)"[^>]*>([\s\S]*?)<div class="label[^>]*>([^<]+)<\/div>\s*<\/a>[\s\S]{0,800}?<div class="power-label[^>]*>\s*Power:\s*<b>([\d.]+)<\/b>/gi;
+const POPULARITY_PATTERN = /<a[^>]+href="\/tier-list\/(deck-types)\/([^"#?]+)"[^>]*>([\s\S]*?)<div class="label[^>]*>([^<]+)<\/div>\s*<\/a>(?:(?!href="\/tier-list\/|class="power-label)[\s\S]){0,800}?<span class="popRank[^>]*>\s*Popularity:\s*<strong>([\d.]+)%<\/strong>/gi;
 
 function inferTier(power) {
   if (power >= 12) return 1;
@@ -13,12 +13,22 @@ function inferTier(power) {
   return 4;
 }
 
-function createDeckReference(encodedName, rawName) {
+function artworkFromAnchor(anchorHtml) {
+  const sourceSet = anchorHtml.match(/\bsrcset="([^"]+)"/i)?.[1];
+  const source = anchorHtml.match(/\bsrc="([^"]+)"/i)?.[1];
+  const candidate = decodeHtml(sourceSet?.split(',').at(-1)?.trim().split(/\s+/)[0] || source || '');
+  return candidate ? candidate.replace(/([?&]width=)\d+/i, (_, prefix) => `${prefix}640`) : undefined;
+}
+
+function createDeckReference(kind, encodedName, rawName, anchorHtml) {
   const name = decodeHtml(rawName).trim();
+  const isEngine = kind === 'engines';
   return {
     name,
-    detailUrl: new URL(`/tier-list/deck-types/${encodedName}`, MASTER_DUEL_META_URL).toString(),
-    imageUrl: `https://imgserv.duellinksmeta.com/v2/mdm/deck-type/${encodeURIComponent(name)}?portrait=true&width=640`,
+    kind: isEngine ? 'engine' : 'deck',
+    detailUrl: new URL(`/tier-list/${kind}/${encodedName}`, MASTER_DUEL_META_URL).toString(),
+    imageUrl: artworkFromAnchor(anchorHtml)
+      || (isEngine ? undefined : `https://imgserv.duellinksmeta.com/v2/mdm/deck-type/${encodeURIComponent(name)}?portrait=true&width=640`),
   };
 }
 
@@ -27,8 +37,8 @@ export function parseMasterDuelMeta(html, fetchedAt = new Date().toISOString()) 
   const popularityItems = [];
 
   for (const match of html.matchAll(POWER_PATTERN)) {
-    const link = createDeckReference(match[1], match[2]);
-    const value = Number(match[3]);
+    const link = createDeckReference(match[1], match[2], match[4], match[3]);
+    const value = Number(match[5]);
     powerItems.push({
       id: `mdm-power-${slugify(link.name)}`,
       name: link.name,
@@ -38,21 +48,23 @@ export function parseMasterDuelMeta(html, fetchedAt = new Date().toISOString()) 
       value,
       unit: 'power',
       tier: inferTier(value),
+      kind: link.kind,
       imageUrl: link.imageUrl,
       detailUrl: link.detailUrl,
     });
   }
 
   for (const match of html.matchAll(POPULARITY_PATTERN)) {
-    const link = createDeckReference(match[1], match[2]);
+    const link = createDeckReference(match[1], match[2], match[4], match[3]);
     popularityItems.push({
       id: `mdm-popularity-${slugify(link.name)}`,
       name: link.name,
       format: 'master-duel',
       source: 'master-duel-meta',
       metric: 'popularity',
-      value: Number(match[3]),
+      value: Number(match[5]),
       unit: 'percent',
+      kind: link.kind,
       imageUrl: link.imageUrl,
       detailUrl: link.detailUrl,
     });
