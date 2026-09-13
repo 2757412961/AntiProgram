@@ -6,6 +6,7 @@ export interface BanlistHistoryCardMetadata {
   chineseName?: string;
   englishName: string;
   imageUrl?: string;
+  rarity?: string;
 }
 
 let cardDatabaseRequest: Promise<YgoProDeckApiItem[]> | null = null;
@@ -18,9 +19,20 @@ function normalizedName(value: string): string {
     .replace(/[^a-z0-9]+/g, '');
 }
 
+function normalizeMasterDuelRarity(value?: string): string | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'n' || normalized === 'normal' || normalized === 'common') return 'N';
+  if (normalized === 'r' || normalized === 'rare') return 'R';
+  if (normalized === 'sr' || normalized === 'super rare') return 'SR';
+  if (normalized === 'ur' || normalized === 'ultra rare') return 'UR';
+  return undefined;
+}
+
 async function loadCardDatabase(): Promise<YgoProDeckApiItem[]> {
   if (!cardDatabaseRequest) {
-    cardDatabaseRequest = fetch('/api/ygoprodeck/cardinfo.php')
+    // `misc=yes` is required for YGOPRODeck to include Master Duel rarity data.
+    cardDatabaseRequest = fetch('/api/ygoprodeck/cardinfo.php?misc=yes')
       .then(async response => {
         if (!response.ok) throw new Error(`卡片元数据接口 HTTP ${response.status}`);
         const payload = await response.json() as { data?: YgoProDeckApiItem[] };
@@ -86,6 +98,9 @@ export async function loadBanlistHistoryCardMetadata(
       imageUrl: hasChineseName
         ? getChineseCardImageUrl(imageId, 'sc', 'thumb2')
         : item.card_images?.[0]?.image_url_small,
+      rarity: item.misc_info
+        ?.map(info => normalizeMasterDuelRarity(info.md_rarity))
+        .find((rarity): rarity is string => Boolean(rarity)),
     });
   }
 

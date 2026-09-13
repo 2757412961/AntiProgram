@@ -1355,9 +1355,81 @@ body {
   font-size: 0.68rem;
 }
 
+.banlist-history-change-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.banlist-history-change-group {
+  --change-group-color: #94a3b8;
+  --change-group-rgb: 148, 163, 184;
+  padding: 0.72rem;
+  border: 1px solid rgba(var(--change-group-rgb), 0.58);
+  border-radius: 10px;
+  background: rgba(var(--change-group-rgb), 0.035);
+}
+
+.banlist-history-change-group.forbidden {
+  --change-group-color: #fb7185;
+  --change-group-rgb: 244, 63, 94;
+}
+
+.banlist-history-change-group.limited {
+  --change-group-color: #fb923c;
+  --change-group-rgb: 249, 115, 22;
+}
+
+.banlist-history-change-group.semi-limited {
+  --change-group-color: #34d399;
+  --change-group-rgb: 16, 185, 129;
+}
+
+.banlist-history-change-group.unlimited {
+  --change-group-color: #60a5fa;
+  --change-group-rgb: 59, 130, 246;
+}
+
+.banlist-history-change-group-head {
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
+  margin-bottom: 0.65rem;
+  color: var(--change-group-color);
+}
+
+.banlist-history-change-group-head strong {
+  font-size: 0.9rem;
+}
+
+.banlist-history-change-group-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  background: #08111f;
+  font-size: 0.7rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.banlist-history-change-group-total {
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.banlist-history-change-group-head small {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 0.64rem;
+}
+
 .banlist-history-change-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 0.5rem;
 }
 
@@ -1383,9 +1455,9 @@ body {
 
 .banlist-history-card-art-wrap {
   position: relative;
-  flex: 0 0 66px;
-  width: 66px;
-  height: 96px;
+  flex: 0 0 84px;
+  width: 84px;
+  height: 122px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 5px;
@@ -1434,28 +1506,40 @@ body {
 }
 
 .banlist-history-transition {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 0.28rem;
-  margin-top: 0.62rem;
-  color: #64748b;
-}
-
-.limit-pill {
-  min-width: 47px;
-  padding: 0.18rem 0.34rem;
-  border: 1px solid currentColor;
+  gap: 0.12rem;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
-  font-size: 0.62rem;
-  font-weight: 900;
-  text-align: center;
+  background: rgba(2, 6, 23, 0.9);
+  color: #cbd5e1;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
 }
 
-.limit-pill.forbidden { color: #f87171; background: rgba(239, 68, 68, 0.08); }
-.limit-pill.limited { color: #fb923c; background: rgba(249, 115, 22, 0.08); }
-.limit-pill.semi-limited { color: #fbbf24; background: rgba(245, 158, 11, 0.08); }
-.limit-pill.unspecified { color: #94a3b8; background: rgba(148, 163, 184, 0.06); }
+.banlist-history-transition .limit-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.52rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.banlist-history-transition .limit-pill.forbidden { color: #f87171; background: rgba(127, 29, 29, 0.82); }
+.banlist-history-transition .limit-pill.limited { color: #fb923c; background: rgba(124, 45, 18, 0.82); }
+.banlist-history-transition .limit-pill.semi-limited { color: #fbbf24; background: rgba(120, 53, 15, 0.82); }
+.banlist-history-transition .limit-pill.unlimited { color: #93c5fd; background: rgba(30, 64, 175, 0.86); }
 
 .banlist-history-null-note {
   flex: 0 0 auto;
@@ -1494,7 +1578,8 @@ body {
   .banlist-history-summary,
   .banlist-history-record-head { align-items: flex-start; flex-direction: column; }
   .banlist-history-source-actions { align-items: flex-start; }
+  .banlist-history-change-group-head small { display: none; }
   .banlist-history-change-grid { grid-template-columns: 1fr; }
   .banlist-history-change { min-height: 104px; }
-  .banlist-history-card-art-wrap { flex-basis: 60px; width: 60px; height: 88px; }
+  .banlist-history-card-art-wrap { flex-basis: 72px; width: 72px; height: 105px; }
 }

@@ -19,6 +19,7 @@ import {
   loadBanlistHistoryCardMetadata,
 } from '../services/banlistHistoryCardMetadata';
 import { getChineseCardBackUrl } from '../services/cardDetailService';
+import { CardCornerBadges } from './CardCornerBadges';
 import {
   MasterDuelBanlistChange,
   MasterDuelBanlistHistoryResponse,
@@ -30,6 +31,45 @@ interface BanlistHistoryModalProps {
   onClose: () => void;
   onSelectCardKeyword: (keyword: string) => void;
 }
+
+interface BanlistHistoryChangeGroup {
+  key: 'forbidden' | 'limited' | 'semi-limited' | 'unlimited';
+  limit: MasterDuelLimit | null;
+  marker: string;
+  label: string;
+  description: string;
+}
+
+const CHANGE_GROUPS: BanlistHistoryChangeGroup[] = [
+  {
+    key: 'forbidden',
+    limit: 'Forbidden',
+    marker: '0',
+    label: '禁止卡片',
+    description: '变更后最多可投入 0 张',
+  },
+  {
+    key: 'limited',
+    limit: 'Limited 1',
+    marker: '1',
+    label: '限制卡片',
+    description: '变更后最多可投入 1 张',
+  },
+  {
+    key: 'semi-limited',
+    limit: 'Limited 2',
+    marker: '2',
+    label: '准限制卡片',
+    description: '变更后最多可投入 2 张',
+  },
+  {
+    key: 'unlimited',
+    limit: null,
+    marker: '3',
+    label: '无限制卡片',
+    description: '变更后通常最多可投入 3 张',
+  },
+];
 
 function displayDate(value: string): string {
   const [year, month, day] = value.slice(0, 10).split('-').map(Number);
@@ -50,14 +90,21 @@ function limitLabel(limit: MasterDuelLimit | null): string {
   if (limit === 'Forbidden') return '禁止';
   if (limit === 'Limited 1') return '限制 1';
   if (limit === 'Limited 2') return '准限制 2';
-  return '—';
+  return '无限制 3';
 }
 
 function limitClass(limit: MasterDuelLimit | null): string {
   if (limit === 'Forbidden') return 'forbidden';
   if (limit === 'Limited 1') return 'limited';
   if (limit === 'Limited 2') return 'semi-limited';
-  return 'unspecified';
+  return 'unlimited';
+}
+
+function limitMarker(limit: MasterDuelLimit | null): string {
+  if (limit === 'Forbidden') return '0';
+  if (limit === 'Limited 1') return '1';
+  if (limit === 'Limited 2') return '2';
+  return '3';
 }
 
 const BanlistHistoryChangeCard: React.FC<{
@@ -90,15 +137,20 @@ const BanlistHistoryChangeCard: React.FC<{
           loading="lazy"
           onError={() => setImageIndex(current => Math.min(current + 1, imageCandidates.length - 1))}
         />
+        <span
+          className="banlist-history-transition"
+          title={`${limitLabel(change.from)} → ${limitLabel(change.to)}`}
+          aria-label={`状态变化：${limitLabel(change.from)}变为${limitLabel(change.to)}`}
+        >
+          <span className={`limit-pill ${limitClass(change.from)}`}>{limitMarker(change.from)}</span>
+          <ArrowRight size={9} aria-hidden="true" />
+          <span className={`limit-pill ${limitClass(change.to)}`}>{limitMarker(change.to)}</span>
+        </span>
+        <CardCornerBadges rarity={metadata?.rarity} compact />
       </span>
       <span className="banlist-history-card-detail">
         <span className="banlist-history-card-name">{displayName}</span>
         {chineseName && <span className="banlist-history-card-name-en">{change.cardName}</span>}
-        <span className="banlist-history-transition">
-          <span className={`limit-pill ${limitClass(change.from)}`}>{limitLabel(change.from)}</span>
-          <ArrowRight size={14} />
-          <span className={`limit-pill ${limitClass(change.to)}`}>{limitLabel(change.to)}</span>
-        </span>
       </span>
     </button>
   );
@@ -389,15 +441,38 @@ export const BanlistHistoryModal: React.FC<BanlistHistoryModalProps> = ({
                           </strong>
                           <small>{batch.changes.length} 项</small>
                         </div>
-                        <div className="banlist-history-change-grid">
-                          {batch.changes.map((change, changeIndex) => (
-                            <BanlistHistoryChangeCard
-                              key={`${change.cardId}-${changeIndex}`}
-                              change={change}
-                              metadata={getBanlistHistoryCardMetadata(cardMetadata, change.cardName)}
-                              onSelect={handleCardClick}
-                            />
-                          ))}
+                        <div className="banlist-history-change-groups">
+                          {CHANGE_GROUPS.map(group => {
+                            const changes = batch.changes.filter(change => change.to === group.limit);
+                            if (changes.length === 0) return null;
+
+                            return (
+                              <section
+                                className={`banlist-history-change-group ${group.key}`}
+                                key={group.key}
+                                aria-label={`${group.label}，${changes.length} 张`}
+                              >
+                                <div className="banlist-history-change-group-head">
+                                  <span className="banlist-history-change-group-marker" aria-hidden="true">
+                                    {group.marker}
+                                  </span>
+                                  <strong>{group.label}</strong>
+                                  <span className="banlist-history-change-group-total">({changes.length})</span>
+                                  <small>{group.description}</small>
+                                </div>
+                                <div className="banlist-history-change-grid">
+                                  {changes.map((change, changeIndex) => (
+                                    <BanlistHistoryChangeCard
+                                      key={`${change.cardId}-${changeIndex}`}
+                                      change={change}
+                                      metadata={getBanlistHistoryCardMetadata(cardMetadata, change.cardName)}
+                                      onSelect={handleCardClick}
+                                    />
+                                  ))}
+                                </div>
+                              </section>
+                            );
+                          })}
                         </div>
                       </section>
                     ))}
@@ -406,8 +481,8 @@ export const BanlistHistoryModal: React.FC<BanlistHistoryModalProps> = ({
               ))}
 
               <div className="banlist-history-null-note">
-                <strong>“—”的含义：</strong>
-                上游镜像没有提供该侧状态。本页不会把它推断为“无限制”或“未实装”。
+                <strong>“无限制 3”的含义：</strong>
+                上游镜像没有提供该侧禁限状态；界面按通常最多可投入 3 张显示，原始数据仍保留为空。
               </div>
             </>
           )}
