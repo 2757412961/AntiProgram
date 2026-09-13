@@ -28,7 +28,18 @@ interface YgocdbCardDetail {
 
 const YGOCDB_API_BASE = '/api/ygocdb';
 const CHINESE_IMAGE_BASE = '/chinese-card-images';
+const YGOCDB_TIMEOUT_MS = 10_000;
 const chineseCardCache = new Map<number, YgocdbCardDetail | null>();
+
+async function fetchYgocdb(input: string, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), YGOCDB_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
 
 function containsChinese(value?: string): boolean {
   return Boolean(value && /[\u3400-\u9fff]/u.test(value));
@@ -92,7 +103,7 @@ async function fetchVerifiedChineseCard(card: YgoCard): Promise<YgoCard | null> 
     if (cached === null) continue;
 
     try {
-      const response = await fetch(`${YGOCDB_API_BASE}/card/${id}?show=all`);
+      const response = await fetchYgocdb(`${YGOCDB_API_BASE}/card/${id}?show=all`);
       if (response.status === 404) {
         chineseCardCache.set(id, null);
         continue;
@@ -121,13 +132,16 @@ export async function localizeCardsFromYgocdb(cards: YgoCard[]): Promise<YgoCard
   }
   const loadBatch = async (ids: number[]) => {
     try {
-      const response = await fetch(`${YGOCDB_API_BASE}/cardset`, {
+      const response = await fetchYgocdb(`${YGOCDB_API_BASE}/cardset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids }),
       });
       if (!response.ok) {
-        if (ids.length > 1) {
+        // 只有请求体/数据本身有问题时才拆分定位坏记录；限流、超时和服务端错误
+        // 继续递归只会把一次故障放大成数十次长时间请求。
+        const shouldSplit = [400, 404, 413, 422].includes(response.status);
+        if (shouldSplit && ids.length > 1) {
           const midpoint = Math.ceil(ids.length / 2);
           await Promise.all([
             loadBatch(ids.slice(0, midpoint)),
@@ -136,16 +150,20 @@ export async function localizeCardsFromYgocdb(cards: YgoCard[]): Promise<YgoCard
           return;
         }
 
-        const id = ids[0];
-        const directResponse = await fetch(`${YGOCDB_API_BASE}/card/${id}?show=all`);
-        if (directResponse.status === 404) {
-          chineseCardCache.set(id, null);
+        if (shouldSplit) {
+          const id = ids[0];
+          const directResponse = await fetchYgocdb(`${YGOCDB_API_BASE}/card/${id}?show=all`);
+          if (directResponse.status === 404) {
+            chineseCardCache.set(id, null);
+            return;
+          }
+          if (!directResponse.ok) throw new Error(`单卡 HTTP ${directResponse.status}`);
+          const directDetail = await directResponse.json() as YgocdbCardDetail;
+          chineseCardCache.set(id, directDetail?.id ? directDetail : null);
           return;
         }
-        if (!directResponse.ok) throw new Error(`单卡 HTTP ${directResponse.status}`);
-        const directDetail = await directResponse.json() as YgocdbCardDetail;
-        chineseCardCache.set(id, directDetail?.id ? directDetail : null);
-        return;
+
+        throw new Error(`批量接口 HTTP ${response.status}`);
       }
       const payload = await response.json() as Record<string, YgocdbCardDetail>;
       for (const id of ids) chineseCardCache.set(id, payload[String(id)] || null);

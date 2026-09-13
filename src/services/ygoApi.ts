@@ -18,7 +18,7 @@ import {
 } from '../utils/cardMetadata';
 
 let cachedYgoProDeckCards: YgoCard[] | null = null;
-let isFetchingYgoProDeckFull = false;
+let ygoProDeckCardsRequest: Promise<YgoCard[]> | null = null;
 
 // 缓存进度状态
 let cacheState: CacheState = { status: 'idle', totalCount: 0, loadedCount: 0 };
@@ -26,6 +26,40 @@ const cacheListeners: Set<(state: CacheState) => void> = new Set();
 
 function notifyCacheListeners() {
   cacheListeners.forEach(fn => fn({ ...cacheState }));
+}
+
+async function ensureYgoProDeckCards(): Promise<YgoCard[]> {
+  if (cachedYgoProDeckCards && cachedYgoProDeckCards.length > 0) {
+    return cachedYgoProDeckCards;
+  }
+  if (ygoProDeckCardsRequest) return ygoProDeckCardsRequest;
+
+  cacheState = { status: 'loading', totalCount: 0, loadedCount: 0 };
+  notifyCacheListeners();
+
+  ygoProDeckCardsRequest = fetch('/api/ygoprodeck/cardinfo.php')
+    .then(async response => {
+      if (!response.ok) throw new Error(`YGOPRODeck HTTP ${response.status}`);
+      const payload = await response.json() as { data?: YgoProDeckApiItem[] };
+      if (!Array.isArray(payload.data) || payload.data.length === 0) {
+        throw new Error('YGOPRODeck 返回了空卡库');
+      }
+      const cards = payload.data.map(mapYgoProDeckToYgoCard);
+      cachedYgoProDeckCards = cards;
+      cacheState = { status: 'ready', totalCount: cards.length, loadedCount: cards.length };
+      notifyCacheListeners();
+      return cards;
+    })
+    .catch(error => {
+      cacheState = { status: 'error', totalCount: 0, loadedCount: 0 };
+      notifyCacheListeners();
+      throw error;
+    })
+    .finally(() => {
+      ygoProDeckCardsRequest = null;
+    });
+
+  return ygoProDeckCardsRequest;
 }
 
 /** 订阅全量缓存进度变化 */
@@ -437,6 +471,31 @@ export function getCardBanStatusForFormat(card: YgoCard, format: GameFormat): st
   return 'Unlimited';
 }
 
+/**
+ * 返回关联分析使用的完整卡片候选集。
+ * 这里只补齐当前环境的卡池与禁限状态，不做全量中文化；关联结果筛选完成后再按需中文化。
+ */
+export async function fetchRelatedCardCandidates(format: GameFormat): Promise<YgoCard[]> {
+  if (format === 'MasterDuel') await getMasterDuelSnapshot();
+  const cards = await ensureYgoProDeckCards();
+
+  return cards
+    .filter(card => format !== 'MasterDuel' || masterDuelSnapshot!.availablePasscodes.has(card.id))
+    .map(card => {
+      const banlistStatus = getCardBanStatusForFormat(card, format);
+      return {
+        ...card,
+        rarity: format === 'MasterDuel'
+          ? masterDuelSnapshot!.rarityByPasscode.get(card.id) || card.rarity
+          : card.rarity,
+        banlistStatus,
+        banlistInfo: format === 'MasterDuel'
+          ? { ...card.banlistInfo, masterDuel: banlistStatus }
+          : card.banlistInfo,
+      };
+    });
+}
+
 // 核心查询逻辑：结合环境格式与最新禁限状态筛选
 export async function fetchCards(dataSource: DataSourceType, filters: SearchFilters): Promise<YgoCard[]> {
   const keyword = filters.keyword.trim();
@@ -474,27 +533,7 @@ export async function fetchCards(dataSource: DataSourceType, filters: SearchFilt
     if (cachedYgoProDeckCards && cachedYgoProDeckCards.length > 0) {
       rawList = cachedYgoProDeckCards;
     } else {
-      if (!isFetchingYgoProDeckFull) {
-        isFetchingYgoProDeckFull = true;
-        cacheState = { status: 'loading', totalCount: 0, loadedCount: 0 };
-        notifyCacheListeners();
-
-        fetch('/api/ygoprodeck/cardinfo.php')
-          .then(res => res.json())
-          .then(data => {
-            if (data.data && Array.isArray(data.data)) {
-              const fullCards = data.data.map(mapYgoProDeckToYgoCard);
-              cachedYgoProDeckCards = fullCards;
-              cacheState = { status: 'ready', totalCount: fullCards.length, loadedCount: fullCards.length };
-              notifyCacheListeners();
-            }
-          })
-          .catch(() => {
-            cacheState = { status: 'error', totalCount: 0, loadedCount: 0 };
-            notifyCacheListeners();
-          })
-          .finally(() => { isFetchingYgoProDeckFull = false; });
-      }
+      void ensureYgoProDeckCards().catch(() => undefined);
 
       if (!keyword) {
         rawList = [];
