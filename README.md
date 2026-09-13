@@ -39,23 +39,15 @@ npm start
 
 ```powershell
 npm install
-npm run dev:worker
+npm run dev         # Node 服务模式
+npm run dev:worker  # Cloudflare Worker 模式
 ```
 
-浏览器仍访问 <http://127.0.0.1:3000>。Vite 会把 API 请求转发给运行在 `127.0.0.1:8787` 的本地 Worker；修改 Worker 文件会自动重载，修改前端文件会由 Vite 热更新。
-
-两种本地模式可以按需选择：
+终端出现以下内容即表示启动成功：
 
 ```text
-npm run dev         Node 服务模式
-npm run dev:worker  Cloudflare Worker 模式
-```
-
-二者默认都占用前端端口 `3000`，不要在同一个终端会话中同时启动。如果需要对照测试，可让 Node 服务使用其他端口：
-
-```powershell
-$env:PORT=3001
-npm run dev
+➜  Local:   http://127.0.0.1:3000/
+浏览器仍访问 <http://127.0.0.1:3000>。Vite 会把 API 请求转发给运行在 `127.0.0.1:8787` 的本地 Worker。
 ```
 
 ### 部署到 Cloudflare
