@@ -13,6 +13,14 @@ import {
 } from 'lucide-react';
 import { fetchMasterDuelBanlistHistory } from '../services/banlistHistoryApi';
 import {
+  BanlistHistoryCardMetadata,
+  getBanlistHistoryCardMetadata,
+  getMasterDuelMetaCardImageUrl,
+  loadBanlistHistoryCardMetadata,
+} from '../services/banlistHistoryCardMetadata';
+import { getChineseCardBackUrl } from '../services/cardDetailService';
+import {
+  MasterDuelBanlistChange,
   MasterDuelBanlistHistoryResponse,
   MasterDuelLimit,
 } from '../types/banlistHistory';
@@ -52,6 +60,50 @@ function limitClass(limit: MasterDuelLimit | null): string {
   return 'unspecified';
 }
 
+const BanlistHistoryChangeCard: React.FC<{
+  change: MasterDuelBanlistChange;
+  metadata?: BanlistHistoryCardMetadata;
+  onSelect: (keyword: string) => void;
+}> = ({ change, metadata, onSelect }) => {
+  const chineseName = metadata?.chineseName;
+  const displayName = chineseName || change.cardName;
+  const imageCandidates = [
+    metadata?.imageUrl,
+    getMasterDuelMetaCardImageUrl(change.cardId),
+    getChineseCardBackUrl(),
+  ].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
+  const [imageIndex, setImageIndex] = useState(0);
+
+  useEffect(() => setImageIndex(0), [change.cardId, metadata?.imageUrl]);
+
+  return (
+    <button
+      className="banlist-history-change"
+      onClick={() => onSelect(displayName)}
+      title={`在 Master Duel 查卡页搜索：${displayName}`}
+    >
+      <span className="banlist-history-card-art-wrap">
+        <img
+          className="banlist-history-card-art"
+          src={imageCandidates[imageIndex]}
+          alt={displayName}
+          loading="lazy"
+          onError={() => setImageIndex(current => Math.min(current + 1, imageCandidates.length - 1))}
+        />
+      </span>
+      <span className="banlist-history-card-detail">
+        <span className="banlist-history-card-name">{displayName}</span>
+        {chineseName && <span className="banlist-history-card-name-en">{change.cardName}</span>}
+        <span className="banlist-history-transition">
+          <span className={`limit-pill ${limitClass(change.from)}`}>{limitLabel(change.from)}</span>
+          <ArrowRight size={14} />
+          <span className={`limit-pill ${limitClass(change.to)}`}>{limitLabel(change.to)}</span>
+        </span>
+      </span>
+    </button>
+  );
+};
+
 export const BanlistHistoryModal: React.FC<BanlistHistoryModalProps> = ({
   isOpen,
   onClose,
@@ -63,6 +115,8 @@ export const BanlistHistoryModal: React.FC<BanlistHistoryModalProps> = ({
   const [selectedYear, setSelectedYear] = useState('ALL');
   const [selectedMonth, setSelectedMonth] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [cardMetadata, setCardMetadata] = useState<Map<string, BanlistHistoryCardMetadata>>(new Map());
+  const [localizingCards, setLocalizingCards] = useState(false);
 
   const load = useCallback(async (forceRefresh: boolean, signal?: AbortSignal) => {
     setLoading(true);
@@ -89,6 +143,26 @@ export const BanlistHistoryModal: React.FC<BanlistHistoryModalProps> = ({
     void load(false, controller.signal);
     return () => controller.abort();
   }, [isOpen, load]);
+
+  useEffect(() => {
+    if (!isOpen || !data) return;
+    let active = true;
+    const englishNames = data.records.flatMap(record =>
+      record.batches.flatMap(batch => batch.changes.map(change => change.cardName)));
+    setLocalizingCards(true);
+    void loadBanlistHistoryCardMetadata(englishNames)
+      .then(metadata => {
+        if (active) setCardMetadata(metadata);
+      })
+      .catch(error => {
+        // English names and mirror artwork remain available if localization fails.
+        console.warn('禁卡表历史中文卡名匹配失败', error);
+      })
+      .finally(() => {
+        if (active) setLocalizingCards(false);
+      });
+    return () => { active = false; };
+  }, [data, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -120,14 +194,16 @@ export const BanlistHistoryModal: React.FC<BanlistHistoryModalProps> = ({
         || date.includes(term)
         || record.batches.some(batch =>
           (batch.effectiveDate || '').includes(term)
-          || batch.changes.some(change =>
-            change.cardName.toLocaleLowerCase().includes(term)
-            || limitLabel(change.from).includes(term)
-            || limitLabel(change.to).includes(term)
-          )
+          || batch.changes.some(change => {
+            const metadata = getBanlistHistoryCardMetadata(cardMetadata, change.cardName);
+            return change.cardName.toLocaleLowerCase().includes(term)
+              || metadata?.chineseName?.toLocaleLowerCase().includes(term)
+              || limitLabel(change.from).includes(term)
+              || limitLabel(change.to).includes(term);
+          })
         );
     });
-  }, [data, searchTerm, selectedMonth, selectedYear]);
+  }, [cardMetadata, data, searchTerm, selectedMonth, selectedYear]);
 
   const visibleChangeCount = useMemo(() => filteredRecords.reduce(
     (total, record) => total + record.batches.reduce(
@@ -254,7 +330,10 @@ export const BanlistHistoryModal: React.FC<BanlistHistoryModalProps> = ({
                     <strong>{visibleChangeCount}</strong> 项状态记录
                   </span>
                 </div>
-                <span>同步于 {displaySyncTime(data.generatedAt)}</span>
+                <span>
+                  {localizingCards ? '正在匹配中文卡名与卡图… · ' : ''}
+                  同步于 {displaySyncTime(data.generatedAt)}
+                </span>
               </div>
 
               {data.warnings.length > 0 && (
@@ -312,19 +391,12 @@ export const BanlistHistoryModal: React.FC<BanlistHistoryModalProps> = ({
                         </div>
                         <div className="banlist-history-change-grid">
                           {batch.changes.map((change, changeIndex) => (
-                            <button
-                              className="banlist-history-change"
+                            <BanlistHistoryChangeCard
                               key={`${change.cardId}-${changeIndex}`}
-                              onClick={() => handleCardClick(change.cardName)}
-                              title="在 Master Duel 查卡页搜索此卡"
-                            >
-                              <span className="banlist-history-card-name">{change.cardName}</span>
-                              <span className="banlist-history-transition">
-                                <span className={`limit-pill ${limitClass(change.from)}`}>{limitLabel(change.from)}</span>
-                                <ArrowRight size={14} />
-                                <span className={`limit-pill ${limitClass(change.to)}`}>{limitLabel(change.to)}</span>
-                              </span>
-                            </button>
+                              change={change}
+                              metadata={getBanlistHistoryCardMetadata(cardMetadata, change.cardName)}
+                              onSelect={handleCardClick}
+                            />
                           ))}
                         </div>
                       </section>
