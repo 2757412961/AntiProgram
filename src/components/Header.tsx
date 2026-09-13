@@ -21,7 +21,9 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="main-header">
       <div className="logo-area">
-        <div className="logo-icon">YGO</div>
+        <div className="logo-icon">
+          <img src="/ygo-search.svg" alt="" aria-hidden="true" />
+        </div>
         <div className="logo-text">
           <h1>游戏王极速查卡器</h1>
           <span>YGO Fast Card Searcher • 多数据源模式</span>

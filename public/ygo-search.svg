@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">游戏王 · 青眼白龙风格龙头</title>
+  <defs>
+    <linearGradient id="silver" x1="22" y1="16" x2="42" y2="54" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="0.5" stop-color="#DDEFFA"/>
+      <stop offset="1" stop-color="#7098BE"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="#081425"/>
+  <rect x="3" y="3" width="58" height="58" rx="14" fill="none" stroke="#4386B7" stroke-width="1.5"/>
+  <path d="M11 45 17 23 8 12 26 20 34 9 35 23 45 29 56 33 53 40 43 43 37 54H17l8-15Z" fill="url(#silver)" stroke="#D8F1FF" stroke-width="1.3" stroke-linejoin="round"/>
+  <path d="m17 23 9-3-12-4Zm13-2 4-12 1 14ZM14 37l-3 8 14-6 5-8Z" fill="#94B9D8"/>
+  <path d="m20 26 10-5 8 8-11-2-8 8Z" fill="#F8FCFF"/>
+  <path d="m28 29 12 2-6 7-9-3Z" fill="#123652"/>
+  <path d="m29 30 9 2-5 4-5-2Z" fill="#1BCBFF"/>
+  <path d="m32 31 3 1-2 3-2-1Z" fill="#F0FDFF"/>
+  <path d="m40 39 13-2-2 5-12 4-5-3Z" fill="#0A2339"/>
+  <path d="m43 39 3-.5-2 4Zm6-1 3-.5-2 3Z" fill="#F8FCFF"/>
+  <path d="m36 43 7 2-6 9H22l7-7Z" fill="#A8CAE3"/>
+  <g fill="none" stroke="#537FA4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m23 25-4 8m6 6 5 4-4 5m4-9 5 2M25 49l11 2m-5-5 9 1"/>
+  </g>
+  <path d="m49 33 3 1-3 1Z" fill="#244A69"/>
+</svg>
