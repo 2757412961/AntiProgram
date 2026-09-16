@@ -85,8 +85,8 @@ const BanlistCardThumb: React.FC<{
       title={`${card.name}\n${section.countLabel}`}
       style={{
         position: 'relative',
-        width: '80px',
-        height: '116px',
+        width: '90px',
+        height: '131px',
         borderRadius: '6px',
         overflow: 'hidden',
         cursor: 'pointer',
@@ -509,7 +509,7 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
                   <div style={{ padding: '0.75rem 1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                     {Array.from({ length: i === 1 ? 18 : i === 2 ? 10 : 6 }).map((_, j) => (
                       <div key={j} style={{
-                        width: '80px', height: '116px', borderRadius: '6px',
+                        width: '90px', height: '131px', borderRadius: '6px',
                         background: 'rgba(255,255,255,0.06)',
                         animation: 'pulse 1.5s infinite',
                         animationDelay: `${j * 0.04}s`,
@@ -565,17 +565,40 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
         </div>
 
         {/* Right: card inspector */}
-        <div style={{
-          width: '320px',
-          flexShrink: 0,
-          borderLeft: '1px solid var(--border-color)',
-          overflowY: 'auto',
-        }}>
+        <div className="banlist-inspector-shell">
           <CardInspector card={selectedCard} />
         </div>
       </div>
 
       <style>{`
+        .banlist-inspector-shell {
+          width: clamp(300px, 24vw, 380px);
+          flex: 0 0 clamp(300px, 24vw, 380px);
+          min-width: 0;
+          border-left: 1px solid var(--border-color);
+          overflow-y: auto;
+          overflow-x: hidden;
+        }
+        .banlist-inspector-shell .inspector-panel {
+          width: 100%;
+          min-width: 0;
+          min-height: 100%;
+          max-height: none;
+          flex: none;
+          position: static;
+          border: 0;
+          border-radius: 0;
+          box-shadow: none;
+        }
+        @media (max-width: 760px) {
+          .banlist-inspector-shell {
+            width: min(42vw, 300px);
+            flex-basis: min(42vw, 300px);
+          }
+          .banlist-inspector-shell .inspector-panel {
+            padding: 1rem;
+          }
+        }
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
