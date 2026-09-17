@@ -358,11 +358,7 @@ body {
 .main-layout {
   display: flex;
   flex: 1;
-  max-width: 1920px;
-  margin: 0 auto;
   width: 100%;
-  padding: clamp(0.75rem, 1.5vw, 1.5rem);
-  gap: clamp(0.75rem, 1.5vw, 1.5rem);
 }
 
 .btn-header-banlist-history {
@@ -393,6 +389,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  padding: clamp(0.75rem, 1.5vw, 1.5rem);
 }
 
 /* Search Bar Container */
@@ -702,9 +699,78 @@ body {
 }
 
 /* Card Inspector Right Panel */
+.resizable-inspector-shell {
+  position: relative;
+  width: var(--inspector-width);
+  flex: 0 0 var(--inspector-width);
+  min-width: 0;
+}
+
+.resizable-inspector-shell > .inspector-panel {
+  width: 100%;
+  min-width: 0;
+  flex-basis: auto;
+}
+
+.main-inspector-shell {
+  position: sticky;
+  top: 77px;
+  height: calc(100vh - 77px);
+  border-left: 1px solid var(--border-color);
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+}
+
+.main-inspector-shell > .inspector-panel {
+  position: static;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.inspector-resize-handle {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  bottom: 0;
+  left: -6px;
+  width: 12px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+  background: transparent;
+  transition: background 0.18s ease;
+}
+
+.inspector-resize-handle:hover,
+.inspector-resize-handle:focus-visible,
+.resizable-inspector-shell.is-resizing .inspector-resize-handle {
+  background: rgba(6, 182, 212, 0.1);
+}
+
+.inspector-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.inspector-resize-handle:hover::after,
+.inspector-resize-handle:focus-visible::after,
+.resizable-inspector-shell.is-resizing .inspector-resize-handle::after {
+  background: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.65);
+}
+
 .inspector-panel {
-  width: clamp(320px, 23vw, 380px);
-  flex: 0 0 clamp(320px, 23vw, 380px);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
@@ -1023,6 +1089,17 @@ body {
   .main-layout {
     flex-direction: column;
   }
+  .resizable-inspector-shell:not(.banlist-inspector-shell) {
+    position: static;
+    width: 100%;
+    height: auto;
+    flex-basis: auto;
+    border-top: 1px solid var(--border-color);
+    border-left: 0;
+  }
+  .resizable-inspector-shell:not(.banlist-inspector-shell) .inspector-resize-handle {
+    display: none;
+  }
   .inspector-panel {
     width: 100%;
     flex-basis: auto;
@@ -1103,6 +1180,10 @@ body {
   }
 
   .main-layout {
+    padding: 0;
+  }
+
+  .content-area {
     padding: 0.65rem;
   }
 

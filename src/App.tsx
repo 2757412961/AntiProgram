@@ -5,6 +5,7 @@ import { PrimarySidebar } from './components/PrimarySidebar';
 import { SearchBar } from './components/SearchBar';
 import { CardGrid } from './components/CardGrid';
 import { CardInspector } from './components/CardInspector';
+import { ResizableInspectorPanel } from './components/ResizableInspectorPanel';
 import { BanlistPage } from './components/BanlistPage';
 import { BanlistHistoryModal } from './components/BanlistHistoryModal';
 import { MinigameModal } from './components/MinigameModal';
@@ -55,7 +56,9 @@ const MainAppContent: React.FC = () => {
                 <CardGrid />
               </div>
 
-              <CardInspector />
+              <ResizableInspectorPanel className="main-inspector-shell">
+                <CardInspector />
+              </ResizableInspectorPanel>
             </main>
           ) : primaryView === 'master-duel-tier'
             ? <DeckPlazaPage key="master-duel-tier" mode="master-duel-tier" />

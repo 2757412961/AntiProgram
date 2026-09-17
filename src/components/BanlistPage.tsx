@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { YgoCard, GameFormat, BanlistPageData } from '../types/ygo';
 import { fetchBanlist } from '../services/ygoApi';
 import { CardInspector } from './CardInspector';
+import { ResizableInspectorPanel } from './ResizableInspectorPanel';
 import { CardCornerBadges } from './CardCornerBadges';
 import { getChineseCardBackUrl, getChineseCardImageUrl } from '../services/cardDetailService';
 import { sortCards } from '../utils/cardSort';
@@ -565,15 +566,13 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
         </div>
 
         {/* Right: card inspector */}
-        <div className="banlist-inspector-shell">
+        <ResizableInspectorPanel className="banlist-inspector-shell" storageKey="banlist-inspector-width">
           <CardInspector card={selectedCard} />
-        </div>
+        </ResizableInspectorPanel>
       </div>
 
       <style>{`
         .banlist-inspector-shell {
-          width: clamp(300px, 24vw, 380px);
-          flex: 0 0 clamp(300px, 24vw, 380px);
           min-width: 0;
           border-left: 1px solid var(--border-color);
           overflow-y: auto;
@@ -594,6 +593,9 @@ export const BanlistPage: React.FC<BanlistPageProps> = ({ onClose }) => {
           .banlist-inspector-shell {
             width: min(42vw, 300px);
             flex-basis: min(42vw, 300px);
+          }
+          .banlist-inspector-shell .inspector-resize-handle {
+            display: none;
           }
           .banlist-inspector-shell .inspector-panel {
             padding: 1rem;
