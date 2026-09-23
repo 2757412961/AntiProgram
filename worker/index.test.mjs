@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from './index.mjs';
+import { recordScheduledCatalogRun } from './catalog/scheduled.mjs';
 
 function createRuntime() {
   return {
@@ -88,4 +89,35 @@ test('Worker maps the Master Duel route to its fixed upstream', async () => {
     globalThis.fetch = originalFetch;
     globalThis.caches = originalCaches;
   }
+});
+
+test('scheduled catalog wiring records a skipped phase-one run in D1', async () => {
+  const calls = [];
+  const env = {
+    DB: {
+      prepare(sql) {
+        calls.push({ sql });
+        return {
+          bind(...values) {
+            calls[0].values = values;
+            return {
+              async run() {
+                calls[0].ran = true;
+              },
+            };
+          },
+        };
+      },
+    },
+  };
+
+  await recordScheduledCatalogRun({ scheduledTime: Date.parse('2026-09-23T08:00:00Z') }, env);
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /INSERT OR IGNORE INTO card_catalog_sync_runs/);
+  assert.equal(calls[0].values[0], 'catalog-scheduled-2026-09-23T08:00:00.000Z');
+  assert.equal(calls[0].values[1], '阶段 1 仅验证 Cron 与 D1；完整目录同步尚未启用。');
+  assert.match(calls[0].values[2], /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(calls[0].values[3], calls[0].values[2]);
+  assert.equal(calls[0].ran, true);
 });

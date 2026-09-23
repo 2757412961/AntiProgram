@@ -19,6 +19,7 @@ yarn-error.log*
 .env.local
 .env.*.local
 .dev.vars*
+# Wrangler local D1/R2/KV state
 .wrangler/
 
 # Optional deck-plaza snapshot database

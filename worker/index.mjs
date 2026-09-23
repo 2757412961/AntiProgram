@@ -3,6 +3,7 @@ import { loadClassicDeck } from '../server/providers/classicDeck.mjs';
 import { buildDeckPlaza, getDeckSources } from './deckPlazaService.mjs';
 import { cachedJsonResponse, jsonResponse } from './lib/cache.mjs';
 import { proxyUpstream } from './lib/proxy.mjs';
+import { recordScheduledCatalogRun } from './catalog/scheduled.mjs';
 
 function targetUrl(base, path = '', search = '') {
   return new URL(`${base}${path}${search}`);
@@ -115,5 +116,8 @@ export default {
         error: error instanceof Error ? error.message : '未知 Worker 错误',
       }, status, { 'cache-control': 'no-store' });
     }
+  },
+  async scheduled(controller, env, context) {
+    context.waitUntil(recordScheduledCatalogRun(controller, env));
   },
 };

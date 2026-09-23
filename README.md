@@ -1,26 +1,43 @@
 # AntiProgram / YGO Card Searcher
 
-本项目同时支持两套运行方式：本地 Node.js 服务，以及 Cloudflare Worker + Static Assets。两套入口共用 React 前端、API 路径和数据解析逻辑。
+生产环境以 Cloudflare Worker + Static Assets 为主。本地开发默认使用 Wrangler 模拟 Worker 和 D1；旧 Node.js 服务仍作为兼容入口保留。
 
-## Node
+## 本地开发（Cloudflare Worker + D1）
 
-### 开发环境 Node 启动
-
-推荐使用 Node.js `22.22.2`。在 PowerShell 中进入项目目录后运行：
+推荐使用 Node.js `22.22.2`。首次启动先安装依赖、应用本地 D1 migration，并写入确定性测试种子：
 
 ```powershell
 nvm use 22.22.2
 npm install
+npm run db:setup:local
 npm run dev
 ```
 
-终端出现以下内容即表示启动成功：
+浏览器访问 <http://127.0.0.1:3000>。Vite 会把 API 和图片请求转发到运行在 `127.0.0.1:8787` 的本地 Worker。D1 等本地 binding 数据保存在 `.wrangler/state`，不会写入生产环境。
+
+本地测试 Cloudflare Cron wiring：
+
+```powershell
+npm run sync:local
+```
+
+阶段 1 的 scheduled handler 只向本地 D1 写入一条 `skipped` 运行记录，用来验证 Cron 与数据库连接；完整卡库同步会在后续阶段启用。
+
+> 完成首次初始化后，日常启动只需运行 `npm run dev`。不要使用 `npm run dev:client` 启动完整应用，因为它不提供 Worker API。
+
+## 兼容 Node 模式
+
+需要验证旧 Node 服务时运行：
+
+```powershell
+npm run dev:node
+```
+
+终端会显示：
 
 ```text
 Vite + Deck Plaza API listening on http://127.0.0.1:3000
 ```
-
-> 日常启动只需运行 `npm run dev`。`npm install` 仅在首次使用或依赖发生变化后需要执行。不要使用 `npm run dev:client` 启动完整应用，因为该命令只启动前端，不提供本项目的服务端 API。
 
 ### 生产模式 Node 启动
 
@@ -31,26 +48,14 @@ npm start
 
 生产模式默认地址为 <http://127.0.0.1:4173>。
 
-## Cloudflare
+### 部署到 Cloudflare
 
-### Cloudflare Worker 本地模式
-
-首次运行前安装依赖，然后启动 Worker 本地模拟器与 Vite 页面：
+`wrangler.jsonc` 中的 D1 `database_id` 当前是本地开发占位值。首次部署必须先创建远程数据库，并把 Wrangler 输出的真实 ID 写入配置：
 
 ```powershell
-npm install
-npm run dev         # Node 服务模式
-npm run dev:worker  # Cloudflare Worker 模式
+npx wrangler d1 create antiprogram-card-catalog
+npm run db:migrate:remote
 ```
-
-终端出现以下内容即表示启动成功：
-
-```text
-➜  Local:   http://127.0.0.1:3000/
-浏览器仍访问 <http://127.0.0.1:3000>。Vite 会把 API 请求转发给运行在 `127.0.0.1:8787` 的本地 Worker。
-```
-
-### 部署到 Cloudflare
 
 上线前先验证 Worker 能成功打包：
 
@@ -68,7 +73,7 @@ npm run deploy:cloudflare
 
 也可以在 Cloudflare Dashboard 的 **Workers & Pages > Create application > Import a repository** 中连接 GitHub。构建命令填写 `npm run build`，部署命令填写 `npx wrangler deploy`，生产分支选择 `main`。Worker 名称必须与 `wrangler.jsonc` 中的 `antiprogram-ygo-card-searcher` 一致。
 
-Cloudflare 使用 `dist` 提供静态页面，并由 `worker/index.mjs` 处理 `/api/*`、`/card-images/*` 和 `/chinese-card-images/*`。API 聚合结果使用 Cloudflare Cache API，本地 Node 模式仍可继续使用内存或 SQLite。
+Cloudflare 使用 `dist` 提供静态页面，并由 `worker/index.mjs` 处理 `/api/*`、`/card-images/*` 和 `/chinese-card-images/*`。D1 migration 位于 `migrations/`；本地专用种子位于 `seed/`，不得导入生产数据库。
 
 ## 常见问题
 
